@@ -1,0 +1,10 @@
+# dependencies (dev-only; never ship the junction/links used by the harness)
+node_modules/
+
+# runtime state created by the plugin itself
+.dsh-safety/
+
+# packaging / OS noise
+*.tgz
+.DS_Store
+Thumbs.db

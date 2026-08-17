@@ -1,0 +1,8 @@
+# dsh-safety bundle patch: mounts the safety harness as a profile bundle row.
+# Installed as a child of the dsh-personal-plugin aggregate (this machine's
+# rule: personal plugins live under profiles/<name>/plugins/dsh-personal-plugin/
+# and are inserted here EXACTLY ONCE — do not add this row to the profile or
+# home cordis.patch.yml).
+- insert:
+    - id: dsh-safety
+      name: dsh-safety
