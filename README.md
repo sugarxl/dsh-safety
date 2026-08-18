@@ -23,13 +23,21 @@ a standalone CLI — so the safety net is usable even when DSH is down.
   *before* they run.
   - **Recursive directory deletes are blocked everywhere** (`rm -r/-rf`,
     `Remove-Item -Recurse`, `rd /s`, `rmdir`, `shutil.rmtree`,
-    `fs.rm recursive`) — no matter which path, routed to `safe_delete`.
+    `fs.rm recursive`, `require('fs').rmSync`…) — no matter which path,
+    routed to `safe_delete`.
   - `write`/`edit`/`str_replace_editor` on **protected** paths (profile
     `package.json`, `cordis.patch.yml`, `cordis.yml`, lockfiles,
     `node_modules`, the deployment install dir, home patch/settings) are
     denied.
   - Deletes on **confirm** zones (the whole OS home dir, plugin sources,
     agent presets) are denied and routed to `safe_delete`.
+  - **`run_code` bodies are scanned too** — arbitrary code execution cannot
+    hide an `fs.rmSync`/`shutil.rmtree` on a protected zone behind a tool
+    call boundary.
+  - **Variable-reference deletes are caught** — `Remove-Item
+    "$env:USERPROFILE\.dsh\…"` whose literal path only exists after expansion
+    is denied (the reference + tail fragment is matched against protected
+    markers).
 - **`safe_delete`** — the only sanctioned delete channel. Moves to a trash
   directory (recoverable via `safety_undo`), `preview:true` shows what would
   be removed first, refuses filesystem roots and its own state dir, and
@@ -189,12 +197,20 @@ Three-tier policy:
 
 The guard decision chain, per tool call: destructive verb? → is it a
 recursive delete? → does an explicit path hit a protected/confirm zone? → does
-the command text hit a protected marker (`~`/relative forms)? → recursive
-deletes are denied **everywhere** as a final rule. Denials are journaled and
-returned to the model as errors (never a crash).
+a variable-reference fragment (`$env:X\…`, `%X%\…`, `${X}/…`) expand into a
+protected zone? → does the command text hit a protected marker (`~`/relative
+forms)? → `run_code` code bodies go through the same chain → recursive deletes
+are denied **everywhere** as a final rule. Denials are journaled and returned
+to the model as errors (never a crash).
 
 A second layer hooks the `fs/write-intent` / `fs/edit-intent` waterfalls and
 throws `FS_DENIED` on protected paths regardless of which tool writes.
+
+`buildPolicy` lives in `safety-core.mjs` and is shared by the plugin guard and
+the standalone CLI, so the two surfaces can never drift apart.
+`restoreSnapshot` is transactional: it backs up live files first, then copies
+snapshot files back, and rolls the whole thing back if either phase fails — a
+failed rollback never leaves the composition half-restored.
 
 ## Structure
 
@@ -207,7 +223,7 @@ dsh-safety/
 │   ├── index.js              # host half: tools, guard, fs hooks, web route
 │   └── client.js             # browser half: "Safety Center" settings panel
 ├── test/
-│   ├── safety.test.mjs       # 14 unit tests (zero deps)
+│   ├── safety.test.mjs       # 19 unit tests (zero deps)
 │   └── harness.mjs           # 38 integration checks (loads @deepseek-ai)
 ├── cordis.patch.yml          # bundle patch (inserts the dsh-safety row)
 ├── package.json              # dsh.bundle + dsh.client + bin
@@ -219,7 +235,7 @@ dsh-safety/
 ## Testing
 
 ```bash
-node --test test/safety.test.mjs   # 14 unit tests, zero dependencies
+node --test test/safety.test.mjs   # 19 unit tests, zero dependencies
 node test/harness.mjs              # 38 integration checks against real @deepseek-ai packages
 npm run check                      # syntax checks
 ```

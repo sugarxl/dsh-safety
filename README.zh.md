@@ -11,9 +11,11 @@
 ## 功能
 
 - **执行前守卫**（`ctx.tools.guard`）：在工具真正运行**之前**拒绝破坏性调用。
-  - **递归删除目录在任意路径一律拒绝**（`rm -r/-rf`、`Remove-Item -Recurse`、`rd /s`、`rmdir`、`shutil.rmtree`、`fs.rm recursive`）——不管删哪里，都强制走 `safe_delete`。
+  - **递归删除目录在任意路径一律拒绝**（`rm -r/-rf`、`Remove-Item -Recurse`、`rd /s`、`rmdir`、`shutil.rmtree`、`fs.rm recursive`、`require('fs').rmSync`…）——不管删哪里，都强制走 `safe_delete`。
   - `write`/`edit`/`str_replace_editor` 写 **protected** 区（profile 的 `package.json`、`cordis.patch.yml`、`cordis.yml`、lockfile、`node_modules`、部署安装目录、home 级补丁/设置）→ 拒绝。
   - 删除命中 **confirm** 区（整个 OS 用户主目录、插件源码、agent-preset）→ 拒绝并引导走 `safe_delete`。
+  - **`run_code` 代码体同样被扫描**——任意代码执行不能靠"绕过工具边界"把对受保护区的 `fs.rmSync`/`shutil.rmtree` 藏起来。
+  - **变量引用删除也能拦**——`Remove-Item "$env:USERPROFILE\.dsh\…"` 这种展开后才是真实路径的命令，会把引用+尾段与保护标记比对并拒绝。
 - **`safe_delete`** —— 唯一合法的删除通道。删除=移动进回收站（`safety_undo` 可还原）；`preview:true` 先看再删；拒绝文件系统根和自身状态目录；每次删除都进审计日志。
 - **组合快照** —— `safety_snapshot` 把整套插件组合（每个 profile 的 manifest/补丁/lockfile、插件 `package.json`+`cordis.patch.yml`、agent-preset）带 SHA-256 存起来；`safety_restore` 一键回滚到 last-known-good（现行文件先自动备份）。默认排除含凭据的文件。
 - **重启前体检** —— `safety_check` 检查 UTF-8、**乱码检测**（错误编码往返，就是"DSH 打不开"的经典原因）、JSON 可解析、**跨补丁层重复插件行 id**（"一行只能在一个层"规则）。
@@ -151,9 +153,11 @@ dsh-safety help
 | `confirm` | 读、编辑 | 删（需 `safe_delete --force`，仍只进回收站） | 整个 `$HOME`、插件源码、agent-preset |
 | `free` | 读写删 | 递归删 | 普通工作区文件 |
 
-守卫对每次工具调用的判定链：有破坏性动词？→ 是不是递归删除？→ 显式路径是否命中 protected/confirm？→ 命令文本是否命中保护标记（`~`/相对路径形式）？→ **递归删除在最后无条件拒绝**。拒绝会写审计日志并作为错误返回给模型（绝不会导致进程崩溃）。
+守卫对每次工具调用的判定链：有破坏性动词？→ 是不是递归删除？→ 显式路径是否命中 protected/confirm？→ 变量引用片段（`$env:X\…`、`%X%\…`、`${X}/…`）是否展开进受保护区？→ 命令文本是否命中保护标记（`~`/相对路径形式）？→ **`run_code` 代码体走同一条链** → 递归删除在最后无条件拒绝。拒绝会写审计日志并作为错误返回给模型（绝不会导致进程崩溃）。
 
 第二层：挂 `fs/write-intent` / `fs/edit-intent` 瀑布，任何途径写 protected 路径都抛 `FS_DENIED`。
+
+`buildPolicy` 位于 `safety-core.mjs`，插件守卫和独立 CLI **共用同一份策略**，两套表面永远不会漂移。`restoreSnapshot` 是事务化的：先备份现行文件、再从快照复制回去，任一阶段失败就整体回滚——**失败的恢复永远不会把组合留成半恢复状态**。
 
 ## 目录结构
 
@@ -166,7 +170,7 @@ dsh-safety/
 │   ├── index.js              # host 半区：工具、guard、fs 钩子、web 路由
 │   └── client.js             # browser 半区：「安全中心」设置面板
 ├── test/
-│   ├── safety.test.mjs       # 14 个单测（零依赖）
+│   ├── safety.test.mjs       # 19 个单测（零依赖）
 │   └── harness.mjs           # 38 项集成检查（真实加载 @deepseek-ai 包）
 ├── cordis.patch.yml          # bundle 补丁（插入 dsh-safety 行）
 ├── package.json              # dsh.bundle + dsh.client + bin
@@ -178,7 +182,7 @@ dsh-safety/
 ## 测试
 
 ```bash
-node --test test/safety.test.mjs   # 14 个单测，零依赖
+node --test test/safety.test.mjs   # 19 个单测，零依赖
 node test/harness.mjs              # 38 项集成检查（需真实 @deepseek-ai 包）
 npm run check                      # 语法检查
 ```

@@ -2,6 +2,17 @@
 
 本项目使用语义化版本（SemVer）。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### Changed（架构加固）
+
+- **策略单一来源**：`buildPolicy` 从插件迁到 `safety-core.mjs`，插件守卫与独立 CLI 共用同一份策略，杜绝两套表面漂移。
+- **guard 覆盖 `run_code`**：任意代码执行体的代码文本同样走破坏性扫描（`fs.rmSync`/`shutil.rmtree`/`require('fs').rmSync` + 保护标记），堵住"绕工具边界删文件"的洞。
+- **shell 变量引用删除可拦**：`Remove-Item "$env:USERPROFILE\.dsh\…"`、`%APPDATA%\npm\…`、`${HOME}/…` 这类展开后才是真实路径的命令，通过引用+尾段与保护标记比对后拒绝。
+- **`restoreSnapshot` 事务化**：先备份现行文件、再从快照复制回，任一阶段失败整体回滚；备份按相对路径存放，修复同名文件互相覆盖的缺陷（曾导致回滚留下孤儿备份）。
+- `prepublishOnly` / `pack` 脚本；README 补 `run_code`/变量引用/事务化恢复说明。
+- 测试：19 个零依赖单测（新增 buildPolicy 共用、变量引用、run_code 扫描、事务化恢复）。
+
 ## [0.1.0] - 2026-08-18
 
 ### Added（首个开源版本）

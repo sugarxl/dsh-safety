@@ -25,6 +25,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import {
+  buildPolicy,
   classify,
   createSnapshot,
   ensureStateDirs,
@@ -62,29 +63,8 @@ const ok = (o) => {
   out(o.text)
 }
 
-const policyForCli = () => {
-  // Mirror the plugin's default zones (best-effort; full buildPolicy lives in
-  // the plugin — here we derive the same three tiers from the home layout).
-  const blockWrite = []
-  const confirmDelete = [os.homedir()]
-  const profilesDir = path.join(home, 'profiles')
-  blockWrite.push(path.join(home, 'cordis.patch.yml'))
-  blockWrite.push(path.join(home, 'settings.yaml'))
-  try {
-    for (const n of readdirSync(profilesDir)) {
-      const d = path.join(profilesDir, n)
-      let st
-      try { st = statSync(d) } catch { continue }
-      if (!st.isDirectory()) continue
-      for (const f of ['package.json', 'cordis.patch.yml', 'cordis.yml', 'pnpm-workspace.yaml', 'pnpm-lock.yaml']) blockWrite.push(path.join(d, f))
-      blockWrite.push(path.join(d, 'node_modules'))
-    }
-    blockWrite.push(path.join(profilesDir, 'node_modules'))
-  } catch { /* no profiles yet */ }
-  confirmDelete.push(profilesDir)
-  confirmDelete.push(path.join(home, '.agent-presets'))
-  return { home, blockWriteRoots: blockWrite, confirmDeleteRoots: confirmDelete }
-}
+// Shared with the plugin: policy zones can never drift between CLI and guard.
+const policyForCli = () => buildPolicy(home, {})
 
 async function main() {
   await ensureStateDirs(home).catch(() => {})

@@ -4,13 +4,15 @@ import { promises as fsp, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  isUnder,
+  buildPolicy,
   classify,
+  destructiveTargetForCall,
+  extractVariableRefFragments,
   isDriveRoot,
+  isRecursiveDelete,
+  isUnder,
   hasDestructiveVerb,
   extractShellPaths,
-  isRecursiveDelete,
-  destructiveTargetForCall,
   utf8Valid,
   looksLikeMojibake,
   scanPatchIds,
@@ -249,5 +251,69 @@ test('snapshot create/list/restore roundtrip', async () => {
   const restored = await restoreSnapshot(home, snap.id)
   assert.equal(restored.ok, true)
   assert.equal(await fsp.readFile(file, 'utf8'), before)
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('buildPolicy produces the shared three-tier zones', () => {
+  const home = path.join(HOME, '.dsh')
+  const p = buildPolicy(home, { homeIsConfirm: false })
+  assert.ok(Array.isArray(p.blockWriteRoots) && p.blockWriteRoots.length > 0)
+  assert.ok(Array.isArray(p.confirmDeleteRoots) && p.confirmDeleteRoots.length > 0)
+  // profiles root is always a confirm zone
+  assert.ok(p.confirmDeleteRoots.some((r) => isUnder(path.join(home, 'profiles', 'web'), r)))
+  // user extras merge in
+  const p2 = buildPolicy(home, { homeIsConfirm: false, confirmDeleteRoots: [path.join(HOME, 'extra')], blockWriteRoots: [path.join(HOME, 'sacred')] })
+  assert.equal(classify(path.join(HOME, 'extra', 'x'), p2), 'confirm')
+  assert.equal(classify(path.join(HOME, 'sacred', 'y'), p2), 'protected')
+})
+
+test('extractVariableRefFragments catches env/percent refs with tail', () => {
+  const frags = extractVariableRefFragments('Remove-Item -Recurse "$env:USERPROFILE\\.dsh\\profiles" -Force')
+  assert.ok(frags.some((f) => f.toLowerCase().includes('.dsh')), JSON.stringify(frags))
+  const pct = extractVariableRefFragments('rd /s "%APPDATA%\\npm\\node_modules\\@deepseek-ai"')
+  assert.ok(pct.some((f) => f.toLowerCase().includes('appdata')), JSON.stringify(pct))
+  const braces = extractVariableRefFragments('rm -rf ${HOME}/.dsh/profiles/web/node_modules')
+  assert.ok(braces.some((f) => f.toLowerCase().includes('.dsh')), JSON.stringify(braces))
+})
+
+test('guard denies variable-ref deletes that expand into a protected zone', () => {
+  const p = { home: HOME, blockWriteRoots: [path.join(HOME, '.dsh')], confirmDeleteRoots: [] }
+  const d = destructiveTargetForCall('pwsh', { command: 'Remove-Item -Recurse -Force "$env:USERPROFILE\\.dsh\\profiles\\web"' }, p)
+  assert.equal(d.action, 'deny')
+  assert.equal(d.cls, 'var-ref')
+})
+
+test('guard scans run_code bodies for destructive protected calls', () => {
+  const p = { home: HOME, blockWriteRoots: [path.join(HOME, '.dsh')], confirmDeleteRoots: [] }
+  // direct recursive fs delete on a protected path inside the code body
+  const d1 = destructiveTargetForCall('run_code', { code: `await tools.pwsh({command:'echo hi'});\nrequire('fs').rmSync(${JSON.stringify(path.join(HOME, '.dsh', 'profiles'))}, {recursive:true})` }, p)
+  assert.equal(d1.action, 'deny')
+  // shutil.rmtree on a protected marker
+  const d2 = destructiveTargetForCall('run_code', { code: `import shutil\nshutil.rmtree('${path.join(HOME, '.dsh', 'profiles')}')` }, p)
+  assert.equal(d2.action, 'deny')
+  // harmless code without destructive verbs passes
+  const d3 = destructiveTargetForCall('run_code', { code: `const x = 1; return x + 1` }, p)
+  assert.equal(d3.action, 'allow')
+})
+
+test('restoreSnapshot is transactional: phase-B failure rolls back cleanly', async () => {
+  const { base, home } = await makeFakeHome()
+  const web = path.join(home, 'profiles', 'web')
+  const file = path.join(web, 'cordis.patch.yml')
+  const pkg = path.join(web, 'package.json')
+  const pkgBefore = await fsp.readFile(pkg, 'utf8')
+  const snap = await createSnapshot(home, 'tx')
+  // live file diverges from the snapshot
+  writeFileSync(file, '- insert:\n    - id: CORRUPTED\n')
+  // break a LATER restore target so phase B fails AFTER earlier files restored:
+  // replace the p1 package dir with a plain file (mkdir for p1/... will ENOTDIR)
+  const p1 = path.join(web, 'plugins', 'p1')
+  await fsp.rm(p1, { recursive: true, force: true })
+  writeFileSync(p1, 'i am a file blocking the p1 dir\n')
+  const res = await restoreSnapshot(home, snap.id)
+  assert.equal(res.ok, false)
+  // rollback: the earlier restored files are back to their pre-restore live state
+  assert.equal(await fsp.readFile(file, 'utf8'), '- insert:\n    - id: CORRUPTED\n')
+  assert.equal(await fsp.readFile(pkg, 'utf8'), pkgBefore)
   await fsp.rm(base, { recursive: true, force: true })
 })
