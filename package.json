@@ -19,6 +19,7 @@
   "files": [
     "lib/",
     "bin/",
+    "docs/",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",

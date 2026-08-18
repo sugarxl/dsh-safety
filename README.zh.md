@@ -2,6 +2,29 @@
 
 [English](README.md) | 中文
 
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
+  &nbsp;
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square" alt="Dependencies">
+  &nbsp;
+  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square" alt="Node">
+  &nbsp;
+  <img src="https://img.shields.io/github/actions/workflow/status/YOUR_NAME/dsh-safety/test.yml?style=flat-square&label=CI" alt="CI">
+</p>
+
+<p align="center">
+  <strong>DSH 安全兜底：拦截无脑删文件 · 删除可撤销 · 组合可回滚 · 重启前体检</strong><br>
+  <em>plugin guard · safe_delete · snapshots · pre-restart check · standalone CLI</em>
+</p>
+
+<div align="center">
+
+[是什么](#是什么) · [功能](#功能) · [安装](#安装) · [快速上手](#快速上手) · [CLI](#cli-参考) · [配置](#配置) · [设计](docs/DESIGN.md) · [常见问题](docs/FAQ.md) · [已知限制](docs/KNOWN-LIMITATIONS.md)
+
+</div>
+
+## 是什么
+
 **DeepSeek Harness (DSH) 的安全兜底插件。** 拦截 AI 代理删除/改写会让 DSH 打不开的关键文件；让每一次删除都可恢复；把整套插件组合快照下来、一条命令回滚；重启前先体检。
 
 零第三方依赖。既可以作为 DSH profile bundle 插件安装，**也可以作为独立 CLI 使用**——即使 DSH 崩了，安全网依然可用。

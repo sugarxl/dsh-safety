@@ -2,6 +2,29 @@
 
 English | [中文](README.zh.md)
 
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
+  &nbsp;
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square" alt="Dependencies">
+  &nbsp;
+  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square" alt="Node">
+  &nbsp;
+  <img src="https://img.shields.io/github/actions/workflow/status/YOUR_NAME/dsh-safety/test.yml?style=flat-square&label=CI" alt="CI">
+</p>
+
+<p align="center">
+  <strong>DSH 安全兜底：拦截无脑删文件 · 删除可撤销 · 组合可回滚 · 重启前体检</strong><br>
+  <em>plugin guard · safe_delete · snapshots · pre-restart check · standalone CLI</em>
+</p>
+
+<div align="center">
+
+[What](#what) · [Features](#features) · [Install](#install) · [Quick start](#quick-start) · [CLI](#cli-reference) · [Config](#configuration) · [Design](docs/DESIGN.md) · [FAQ](docs/FAQ.md) · [Known limitations](docs/KNOWN-LIMITATIONS.md)
+
+</div>
+
+## What
+
 **A safety harness for DeepSeek Harness (DSH).** Stops the AI agent from
 deleting or rewriting the files that make DSH unbootable, makes every delete
 recoverable, snapshots the whole plugin composition for one-command rollback,

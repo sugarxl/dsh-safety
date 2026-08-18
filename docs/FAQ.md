@@ -1,0 +1,54 @@
+# 常见问题（FAQ）
+
+## 会不会让我的 DSH 打不开？
+
+不会。插件是 **fail-soft** 的：注册/加载任何一步出错都只降级记日志，不影响 DSH 启动。你担心的"装个插件把 GUI 弄崩"，正是本插件自己绝不做的事。
+
+## 它是不是和 DSH 自带的沙箱/审批重复？
+
+部分重复，但不完全。DSH 自带 `dsh-sandbox-policy`（工作区外要审批）+ `dsh-user-approval`（确认门）——**在配置正确的前提下，那才是第一道、也是更强的一道防线**。但现实里沙箱常常是宽开的（曾实测：一条 `Remove-Item -Recurse -Force` 没有任何内置机制拦住）。本插件补的是：
+- dsh 没有的**恢复层**：回收站/undo、组合快照/回滚、删除审计、重启前体检；
+- 宽开沙箱下的**兜底拦截**。
+
+最佳实践：**先把 DSH 沙箱/审批配好，再用本插件做恢复层**。
+
+## 我想删某个受保护路径上的文件，怎么办？
+
+用 `safe_delete`（或 CLI `dsh-safety delete`）加 `force:true`/`--force`。它仍然**只进回收站，永不真正删除**，随时可 `undo`。
+
+## 为什么递归删除在任何路径都无条件拒绝？
+
+目录递归删除（`rm -rf`、`Remove-Item -Recurse`）的破坏半径最大、意图最难猜，而且是那次真实事故的直接手法。宁可拦错、不可放错——真要删，走 `safe_delete` 进回收站（可撤销）。
+
+## DSH 打不开了，我还能用这个吗？
+
+能。CLI（`dsh-safety`）完全不依赖 DSH，直接读写 `$DSH_HOME/.dsh-safety` 状态：
+```bash
+dsh-safety check                      # 找乱码/JSON/重复 id
+dsh-safety status                     # 看可用快照
+dsh-safety restore <id> --confirm     # 回滚
+```
+
+## 模型用 `run_code` 执行任意代码，会不会绕过？
+
+guard 会**扫描 `run_code` 的代码体文本**（`fs.rmSync`/`shutil.rmtree`/`require('fs').rmSync` + 保护标记），直白写法会被拦。但文本扫描挡不住动态拼接/混淆——这是根本边界：**`run_code` 是任意代码执行，真正隔离它的只有 DSH 沙箱**，插件只是增加一层难度。
+
+## 会不会吃满我的磁盘？
+
+不会。回收站和快照都有保留上限（`keepTrash` 默认 200、`keepSnapshots` 默认 10），每次删除/快照会自动裁剪。
+
+## 我有多个 profile，能用吗？
+
+能。`buildPolicy` 自动扫描 `$DSH_HOME/profiles/*` 下全部 profile，不需要逐个配置。
+
+## 我在用 OCL（deepseek-harness 的 fork），能用吗？
+
+本插件面向 DSH（`$DSH_HOME`、`@deepseek-ai/*`）。OCL 用的是 `OCL_HOME` 和 `@ocl/*`，需要一个小适配层（`homeIsConfirm` 等配置已预留）。社区版暂未内置 OCL 适配。
+
+## 它和 `dsh plugin` 安装流程冲突吗？
+
+不冲突。官方路径是 `dsh plugin --profile web add <包名>`（自动 reconcile 进 bundles）。个人聚合包（`dsh-personal-plugin`）是另一条可选路径，两者选一即可，**不要同时挂**（同一行不能出现在两个层）。
+
+## 快照里会不会存到我的密钥？
+
+不会。`settings.yaml`、`.credentials.yaml` 默认被排除（`snapshotExclude` 可配置）。但请勿把 `$DSH_HOME/.dsh-safety/` 目录本身推上任何公开仓库。
