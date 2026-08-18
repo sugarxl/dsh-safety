@@ -1,4 +1,4 @@
-<#
+﻿<#
 # dsh-safety recover.ps1 — 启动失败急救（官方 profile 级）
 #
 # 场景：dsh web 打不开（例如装了某个坏插件 / 补丁层损坏）。

@@ -1,4 +1,4 @@
-<#
+﻿<#
 # dsh-safety install.ps1 — 官方安装方式的"安全包装"：备份 → dsh plugin add → 校验 → 失败自动回滚
 #
 # 安装走官方机制（与 README 一致）：
