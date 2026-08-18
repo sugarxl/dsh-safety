@@ -3,15 +3,17 @@
 [English](README.md) | 中文
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
+  <a href="https://github.com/sugarxl/dsh-safety/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square" alt="Dependencies">
+  <a href="https://github.com/sugarxl/dsh-safety/blob/main/package.json"><img src="https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square" alt="dependencies"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square" alt="Node">
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square" alt="node"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="v0.1.0">
+  <a href="https://www.npmjs.com/package/@suagr_xl/dsh-safety"><img src="https://img.shields.io/npm/v/@suagr_xl/dsh-safety?style=flat-square" alt="npm version"></a>
   &nbsp;
-  <img src="https://img.shields.io/github/actions/workflow/status/sugarxl/dsh-safety/test.yml?style=flat-square&label=CI" alt="CI">
+  <a href="https://github.com/sugarxl/dsh-safety/releases"><img src="https://img.shields.io/github/v/release/sugarxl/dsh-safety?style=flat-square" alt="github release"></a>
+  &nbsp;
+  <a href="https://github.com/sugarxl/dsh-safety/actions"><img src="https://img.shields.io/github/actions/workflow/status/sugarxl/dsh-safety/test.yml?style=flat-square&label=CI" alt="ci"></a>
 </p>
 
 <p align="center">
