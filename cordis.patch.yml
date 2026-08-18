@@ -1,8 +1,15 @@
 # dsh-safety bundle patch: mounts the safety harness as a profile bundle row.
-# Installed as a child of the dsh-personal-plugin aggregate (this machine's
-# rule: personal plugins live under profiles/<name>/plugins/dsh-personal-plugin/
-# and are inserted here EXACTLY ONCE — do not add this row to the profile or
-# home cordis.patch.yml).
+#
+# This file is read by the loader as a BUNDLE layer once the package is
+# installed into a profile via the official flow:
+#
+#   dsh plugin --profile <name> add <pkg>          # published npm package
+#   dsh plugin --profile <name> add link:<abs>     # local repo (development)
+#
+# The package lands in $DSH_HOME/profiles/<name>/node_modules/<pkg>/ and is
+# added to the profile's dsh.profile.bundles by reconcile. The row id must
+# appear in exactly one layer — never duplicate it in the profile or home
+# cordis.patch.yml.
 - insert:
     - id: dsh-safety
       name: dsh-safety

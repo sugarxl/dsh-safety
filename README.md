@@ -113,13 +113,19 @@ bundle automatically. Note: the profile directory is not a pnpm workspace, so
 any `workspace:*` deps would fall back to the npm registry — this plugin has
 no runtime deps beyond dsh's own peer packages, so no fallback is needed.
 
-### Personal-plugin aggregate
+### Where it lands (official layout)
 
-If your deployment keeps personal plugins in a `dsh-personal-plugin`
-aggregate bundle, copy the directory under the aggregate root, add one insert
-row to the aggregate's `cordis.patch.yml`, add `"dsh-safety": "workspace:*"`
-to its `package.json`, then `pnpm install` in the profile dir. See
-`install.ps1` for a scripted snapshot → install → verify → rollback version.
+Both installs go through the official `dsh plugin` mechanism — nothing else to
+configure:
+
+```
+$DSH_HOME/profiles/<name>/package.json                # + dependency + dsh.profile.bundles
+$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # the installed package
+```
+
+The bundle layer is read at boot from the package's own `cordis.patch.yml`.
+The `dsh-safety` row id appears in exactly one layer (that file); never add it
+to the profile or home `cordis.patch.yml`.
 
 ### Verify & uninstall
 

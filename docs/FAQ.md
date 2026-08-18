@@ -47,7 +47,7 @@ guard 会**扫描 `run_code` 的代码体文本**（`fs.rmSync`/`shutil.rmtree`/
 
 ## 它和 `dsh plugin` 安装流程冲突吗？
 
-不冲突。官方路径是 `dsh plugin --profile web add <包名>`（自动 reconcile 进 bundles）。个人聚合包（`dsh-personal-plugin`）是另一条可选路径，两者选一即可，**不要同时挂**（同一行不能出现在两个层）。
+不冲突——本插件**只走官方流程**：`dsh plugin --profile <name> add <包名>`（或本地 `link:`）。包会被自动 reconcile 进该 profile 的 `dsh.profile.bundles`，装进 `$DSH_HOME/profiles/<name>/node_modules/`，不需要任何手工配置，也没有"个人聚合包"这种额外约定。
 
 ## 快照里会不会存到我的密钥？
 

@@ -69,9 +69,16 @@ dsh plugin --profile web add link:$(pwd)     # 把仓库软链进 profile
 
 用 `link:` 是软链（改 `lib/` 重启即生效），`file:` 则是复制快照。`dsh plugin` 会自动 reconcile 进 bundles。注意：profile 目录不是 pnpm workspace，`workspace:*` 依赖会回退到 npm 仓库——本插件除了 dsh 自带的 peer 包没有任何运行时依赖，因此不需要回退。
 
-### 个人插件聚合包
+### 官方安装布局
 
-如果你的部署把个人插件统一收进 `dsh-personal-plugin` 聚合包：把目录复制到聚合包根下，在聚合包 `cordis.patch.yml` 加一行 insert，`package.json` 加 `"dsh-safety": "workspace:*"`，然后到 profile 目录跑 `pnpm install`。`install.ps1` 提供了这条路径的脚本化版本（先快照→安装→校验→失败自动回滚）。
+两种方式都走官方 `dsh plugin` 机制，装完无需任何手工配置：
+
+```
+$DSH_HOME/profiles/<name>/package.json                # 新增依赖 + dsh.profile.bundles
+$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # 安装的包本体
+```
+
+bundle 层在启动时从包内的 `cordis.patch.yml` 读取。`dsh-safety` 这个行 id 只能出现在这一个层（包内文件）——**不要**再写进 profile 或 home 的 `cordis.patch.yml`。
 
 ### 验证与卸载
 
