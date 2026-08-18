@@ -69,7 +69,7 @@ cd dsh-safety
 dsh plugin --profile web add link:$(pwd)     # 把仓库软链进 profile
 ```
 
-用 `link:` 是软链（改 `lib/` 重启即生效），`file:` 则是复制快照。`dsh plugin` 会自动 reconcile 进 bundles。注意：profile 目录不是 pnpm workspace，`workspace:*` 依赖会回退到 npm 仓库——本插件除了 dsh 自带的 peer 包没有任何运行时依赖，因此不需要回退。
+用 `link:` 是软链（改 `lib/` 重启即生效），`file:` 则是复制快照。`dsh plugin` 会自动 reconcile 进 bundles。注意：profile 目录不是 pnpm workspace，`workspace:*` 依赖会回退到 npm 仓库——本插件**完全没有运行时依赖**（import 只有 Node 内置 + 自己的 `safety-core.mjs`），所以裸 `link:` 安装不需要它自己的 `node_modules`，也不存在回退问题。
 
 ### 官方安装布局
 

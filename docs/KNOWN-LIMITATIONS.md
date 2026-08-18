@@ -16,7 +16,7 @@ guard 扫描 `run_code` 代码体，覆盖主流的直白写法（`fs.rmSync`/`s
 
 - 递归识别靠常见写法（`-Recurse`/`-r`/`-rf`/`--recursive`/`/s`/`shutil.rmtree`/`fs.rm recursive` 等）；冷门等价写法（管道删除 `Get-ChildItem | Remove-Item`、`Get-ChildItem ... -Recurse | Remove-Item` 等）可能漏判。
 - 变量引用检测覆盖 `$env:X`/`$X`/`${X}`/`%X%`；通配符、命令注入、跨行拼接可能逃过。
-- 保护标记（`.dsh`、`node_modules`…）可能误伤**恰好提到这些字样的**非破坏性命令——因此只在"命中破坏性动词"后才触发标记检查。
+- 保护标记（`.dsh`、`node_modules`…）可能误伤**恰好提到这些字样的**非破坏性命令——因此只在"命中破坏性动词"后才触发标记检查。**真实案例**：一条命令里出现 `Remove-Item node_modules` 的字样（哪怕是给人看的说明文字），会被拦——`node_modules` 标记 + 破坏性动词同时出现即判为危险。
 - 相对路径按**dsh 进程的 cwd** 解析判断，可能与模型会话的工作区根不同——所以相对路径写入 protected 区时可能判不准（绝对路径无此问题）。
 
 ## 4. 不改 DSH 内核，所以治不了"启动即崩"

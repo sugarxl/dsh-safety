@@ -87,4 +87,4 @@ run_code 代码体走同一条链？
 2. **fail-soft apply**：插件注册失败只降级记日志，**安全插件自己绝不能变成"装上就打不开"的事故源**。
 3. **快照排除凭据**：`settings.yaml`/`.credentials.yaml` 默认不进快照，防泄露。
 4. **事务化回滚**：`restoreSnapshot` 两阶段 + 失败整体回滚，备份按相对路径存放（避免同名冲突）。
-5. **零第三方依赖**：纯 node 内置 + dsh 自带 peer 包，供应链最小。
+5. **零外部依赖**：import 只有 Node 内置 + 自己的 `safety-core.mjs`——不 import 任何 `@deepseek-ai/*`，所以 `link:` 裸装（无自带 `node_modules`）也能启动，供应链最小。

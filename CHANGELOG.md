@@ -4,15 +4,17 @@
 
 ## [Unreleased]
 
-### Fixed（深度代码审查修复）
+### Fixed（真实部署暴露的两个启动 bug + 深度审查修复）
 
+- **`link:` 裸装启动失败（真实 bug）**：`lib/index.js` 原先 `import` `@deepseek-ai/dsh-tools`/`dsh-fs`，但 `link:` 安装的插件没有自带 `node_modules` → Node 解析失败 → dsh 启动崩溃。已改为**零外部 import**（手写 JSON Schema 工具定义 + 稳定错误码），裸 `link:` 装、无需任何 junction 即可启动。
+- **浏览器端 `Failed to load plugins`（真实 bug）**：`lib/client.js` 模块注册 id 从 `"dsh-safety"` 改为 scoped 全名 `"@sugarxl/dsh-safety"`（dsh 客户端模块系统要求 scoped 包注册完整包名）。
 - **run_code 裸 fs 调用绕过**（真实绕过）：`import { rmSync/unlinkSync/rmdirSync } from 'node:fs'` 后的**裸调用**（无 `.` 前缀）先前完全漏检，现已识别并拦截（配保护标记/递归判定）。
 - **`rm --recursive` 漏检**：补进递归删除识别。
 - **快照失败残留**：`createSnapshot` 中途失败会清理半成品目录，不再留下无 manifest 的垃圾快照。
 - **还原定位窗口**：`trashRestore` 查找 original 从"最近 5000 条日志"改为读全量，老删除也能精确还原到原路径。
 - **CLI `--home` 参数解析**：修复值被吞进 positional 的问题；删除未使用的 `ok` 死代码。
 - **安全中心 web API 加固**：POST 写操作（undo/restore/snapshot）要求 `X-DSH-Safety: 1` 头；面板请求加 15s 超时。
-- 已知限制补：`run_code` import 别名/动态构造仍可能绕过、相对路径按进程 cwd 解析、web API 护栏是轻量的。
+- 已知限制补：`run_code` import 别名/动态构造仍可能绕过、相对路径按进程 cwd 解析、web API 护栏是轻量的、marker 误报真实案例。
 
 ### Changed（架构加固）
 

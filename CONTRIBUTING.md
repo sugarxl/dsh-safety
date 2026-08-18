@@ -22,7 +22,8 @@ node test/harness.mjs              # 集成检查（需要真实 @deepseek-ai �
   ```bash
   git hash-object README.md README.zh.md
   ```
-- 保持零第三方运行时依赖（`peerDependencies` 只有 dsh 自带的包）。
+- 保持零外部依赖：`lib/` 的 import 只允许 Node 内置 + 仓库内模块——**不要** import `@deepseek-ai/*`（裸 `link:` 安装没有自带 `node_modules`，会启动失败）。
+- 每次修改后跑 `node test/harness.mjs`（无需 junction、干净检出即可通过）。
 
 ## 报告问题
 

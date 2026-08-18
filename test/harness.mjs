@@ -1,8 +1,8 @@
 /**
  * Integration harness for the dsh-safety HOST half, without a running DSH.
- * Imports the real `@deepseek-ai/dsh-tools` / `@deepseek-ai/dsh-fs`, runs
- * `apply()` against a stub `ctx`, then exercises the guard, the fs waterfall,
- * and the registered tools. Run from the repo root:
+ * Runs `apply()` against a stub `ctx`, then exercises the guard, the fs
+ * waterfall, and the registered tools. Zero external imports — no
+ * `@deepseek-ai/*` needed, so it runs from a clean checkout:
  *
  *   node test/harness.mjs
  */

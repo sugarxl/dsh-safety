@@ -112,7 +112,9 @@ The `link:` protocol symlinks the repo (changes to `lib/` apply after a
 restart), unlike `file:` which copies a snapshot. `dsh plugin` reconciles the
 bundle automatically. Note: the profile directory is not a pnpm workspace, so
 any `workspace:*` deps would fall back to the npm registry — this plugin has
-no runtime deps beyond dsh's own peer packages, so no fallback is needed.
+**zero runtime dependencies at all** (its imports are only Node builtins +
+its own `safety-core.mjs`), so a bare `link:` install works with no
+`node_modules` of its own and no fallback is needed.
 
 ### Where it lands (official layout)
 
