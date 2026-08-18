@@ -12,4 +12,4 @@
 # cordis.patch.yml.
 - insert:
     - id: dsh-safety
-      name: dsh-safety
+      name: '@sugarxl/dsh-safety'

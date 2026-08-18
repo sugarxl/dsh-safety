@@ -19,7 +19,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$pluginName = 'dsh-safety'
+$rowId = 'dsh-safety'                 # 组合行 id（不变）
+$pkgName = '@sugarxl/dsh-safety'      # npm 包名（reconcile / remove 用这个）
 $dshHome = $env:USERPROFILE + '\.dsh'
 $profileDir = Join-Path (Join-Path $dshHome 'profiles') $Profile
 $profilePkg = Join-Path $profileDir 'package.json'
@@ -32,10 +33,10 @@ Write-Host "===== dsh-safety 安装计划（官方机制）====="
 Write-Host "源:        $absSource"
 Write-Host "profile:   $Profile  ($profileDir)"
 Write-Host "命令:      dsh plugin --profile $Profile add link:$absSource"
-Write-Host "安装位置:  $profileDir\node_modules\$pluginName\"
-Write-Host "组合层:    $profilePkg  (dsh.profile.bundles 自动 reconcile)"
+Write-Host "安装位置:  $profileDir\node_modules\@sugarxl\dsh-safety\（scoped 包）"
+Write-Host "组合层:    $profilePkg  (dsh.profile.bundles 自动 reconcile -> $pkgName)"
 Write-Host "备份:      $backupRoot"
-Write-Host "校验:      dsh --profile $Profile --dump-config | findstr $pluginName"
+Write-Host "校验:      dsh --profile $Profile --dump-config | findstr $rowId"
 Write-Host "=========================================="
 
 if (-not $Apply) { Write-Host "`n[DRY-RUN] 未带 -Apply，未写任何文件。确认后加 -Apply 执行。"; exit 0 }
@@ -56,8 +57,8 @@ try {
   Write-Host "3) 校验: dsh --profile $Profile --dump-config ..."
   $dump = & dsh --profile $Profile --dump-config 2>&1 | Out-String
   if ($LASTEXITCODE -ne 0) { throw "dump-config 失败: $dump" }
-  if ($dump -notmatch $pluginName) { throw "dump-config 未见 $pluginName 行" }
-  Write-Host "   ✔ $pluginName 行已出现在组合树中"
+  if ($dump -notmatch $rowId) { throw "dump-config 未见 $rowId 行" }
+  Write-Host "   ✔ $rowId 行已出现在组合树中"
 
   Write-Host "`n✅ 安装完成。请重启 dsh web 生效。"
   Write-Host "回滚入口: recover.ps1（或手动 $backupRoot 的备份）"
@@ -65,9 +66,9 @@ try {
 catch {
   Write-Host "`n❌ 安装失败，回滚中..."
   try {
-    & dsh plugin --profile $Profile remove $pluginName 2>&1 | Out-Null
+    & dsh plugin --profile $Profile remove $pkgName 2>&1 | Out-Null
     if (Test-Path (Join-Path $backupRoot 'package.json')) { Copy-Item -Force (Join-Path $backupRoot 'package.json') $profilePkg }
-    Write-Host "已回滚（dsh plugin remove + 恢复 profile package.json）。"
+    Write-Host "已回滚（dsh plugin remove $pkgName + 恢复 profile package.json）。"
   } catch {
     Write-Host "回滚也失败了，请手动恢复: $backupRoot"
   }

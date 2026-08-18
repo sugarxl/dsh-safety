@@ -54,12 +54,12 @@
 ### 从 npm 安装（推荐）
 
 ```sh
-dsh plugin --profile web add dsh-safety
+dsh plugin --profile web add @sugarxl/dsh-safety
 ```
 
 `dsh plugin` 会跑 pnpm，并因本包声明了 `dsh.bundle` 自动把它加进 `dsh.profile.bundles`。装完重启 `dsh web`，守卫即生效、`safety_*` 工具可用。
 
-> 尚未发布到 npm——在此之前用下面的仓库安装，或你发布到自己的 scope 后按包名安装。
+> 尚未发布到 npm——在此之前用下面的仓库安装。
 
 ### 从仓库安装（开发调试）
 
@@ -90,7 +90,7 @@ dsh-safety check                                        # 重启前体检
 # 重启 dsh web
 
 # 卸载：
-dsh plugin --profile web remove dsh-safety
+dsh plugin --profile web remove @sugarxl/dsh-safety
 # 重启 dsh web
 ```
 
@@ -107,7 +107,7 @@ CLI 与插件读写同一个 `$DSH_HOME/.dsh-safety` 状态目录，DSH 挂了�
 
 - **装了也重启了，但没生效**：要重启整个 `dsh web` 进程，刷新页面不够；用 `dsh --profile web --dump-config` 确认行已挂载。
 - **`ERR_PNPM_IGNORED_BUILDS`**：pnpm 拒绝依赖的构建脚本，把提示的包加进 profile 的 `pnpm-workspace.yaml` `allowBuilds` 后重跑。
-- **pnpm 发布年龄门禁装到旧版**：pnpm 11 的 `minimumReleaseAge` 会在发布后约 10 天内静默装旧版；在 profile 的 `pnpm-workspace.yaml` 加 `minimumReleaseAgeExclude: ['dsh-safety']`，再执行 `dsh plugin --profile web update dsh-safety` 升级。
+- **pnpm 发布年龄门禁装到旧版**：pnpm 11 的 `minimumReleaseAge` 会在发布后约 10 天内静默装旧版；在 profile 的 `pnpm-workspace.yaml` 加 `minimumReleaseAgeExclude: ['@sugarxl/dsh-safety']`，再执行 `dsh plugin --profile web update @sugarxl/dsh-safety` 升级。
 
 ## 快速上手
 

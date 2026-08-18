@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   git hash-object README.md README.zh.md
-README.md: 32975d13fc58b73687fa11a9f185c8aaf75f9b2f
-README.zh.md: c1885a993bed897e70955ad7db64c6405d2b42c4
+README.md: 36d1f05bff2fb6e79f0f3faf52a0723b86f25c44
+README.zh.md: eff264c9dc20edc959203ebe01f04dbb5f04cdd0

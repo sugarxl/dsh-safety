@@ -91,15 +91,14 @@ Node.js >= 22 and pnpm.
 ### From npm (recommended)
 
 ```sh
-dsh plugin --profile web add dsh-safety
+dsh plugin --profile web add @sugarxl/dsh-safety
 ```
 
 `dsh plugin` runs pnpm and reconciles `dsh.profile.bundles` automatically
 because this package declares `dsh.bundle`. Restart `dsh web` — the guard is
 then active and the `safety_*` tools appear.
 
-> Not published to npm yet — until then use the repository install below, or
-> publish under your own scope and install by that name.
+> Not published to npm yet — until then use the repository install below.
 
 ### From the repository (development)
 
@@ -137,7 +136,7 @@ dsh-safety check                                        # pre-restart gate
 # restart dsh web
 
 # uninstall:
-dsh plugin --profile web remove dsh-safety
+dsh plugin --profile web remove @sugarxl/dsh-safety
 # restart dsh web
 ```
 
@@ -150,8 +149,8 @@ dsh plugin --profile web remove dsh-safety
   the listed packages to `pnpm-workspace.yaml` `allowBuilds` and re-run.
 - **pnpm release-age gate installs an old version**: pnpm 11's
   `minimumReleaseAge` can silently pick an older publish within ~10 days; add
-  `minimumReleaseAgeExclude: ['dsh-safety']` to the profile's
-  `pnpm-workspace.yaml` and run `dsh plugin --profile web update dsh-safety`.
+  `minimumReleaseAgeExclude: ['@sugarxl/dsh-safety']` to the profile's
+  `pnpm-workspace.yaml` and run `dsh plugin --profile web update @sugarxl/dsh-safety`.
 
 ### Standalone CLI (no plugin install needed)
 
