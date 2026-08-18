@@ -6,7 +6,7 @@
   "type": "module",
   "main": "lib/index.js",
   "bin": {
-    "dsh-safety": "./bin/dsh-safety.mjs"
+    "dsh-safety": "bin/dsh-safety.mjs"
   },
   "exports": {
     ".": {
