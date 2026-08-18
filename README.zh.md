@@ -11,7 +11,13 @@
   &nbsp;
   <a href="https://www.npmjs.com/package/@suagr_xl/dsh-safety"><img src="https://img.shields.io/npm/v/@suagr_xl/dsh-safety?style=flat-square" alt="npm version"></a>
   &nbsp;
+  <a href="https://www.npmjs.com/package/@suagr_xl/dsh-safety"><img src="https://img.shields.io/npm/dm/@suagr_xl/dsh-safety?style=flat-square" alt="npm downloads"></a>
+  &nbsp;
   <a href="https://github.com/sugarxl/dsh-safety/releases"><img src="https://img.shields.io/github/v/release/sugarxl/dsh-safety?style=flat-square" alt="github release"></a>
+  &nbsp;
+  <a href="https://github.com/sugarxl/dsh-safety/stargazers"><img src="https://img.shields.io/github/stars/sugarxl/dsh-safety?style=flat-square" alt="stars"></a>
+  &nbsp;
+  <a href="https://github.com/sugarxl/dsh-safety/commits/main"><img src="https://img.shields.io/github/last-commit/sugarxl/dsh-safety?style=flat-square" alt="last commit"></a>
   &nbsp;
   <a href="https://github.com/sugarxl/dsh-safety/actions"><img src="https://img.shields.io/github/actions/workflow/status/sugarxl/dsh-safety/test.yml?style=flat-square&label=CI" alt="ci"></a>
 </p>
