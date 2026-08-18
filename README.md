@@ -82,43 +82,68 @@ a standalone CLI — so the safety net is usable even when DSH is down.
 
 ## Install
 
-The plugin is a standard DSH profile bundle. Pick one:
+System requirements: a working DeepSeek Harness (`dsh web` boots). npm
+install has no extra requirements; installing from the repository needs
+Node.js >= 22 and pnpm.
 
-### Option A — install into any profile via `dsh plugin` (recommended)
+### From npm (recommended)
 
-```bash
-# from the repo root
-dsh plugin --profile web add file:$(pwd)
-# or with an absolute path:
-#   dsh plugin --profile web add file:/abs/path/to/dsh-safety
+```sh
+dsh plugin --profile web add dsh-safety
 ```
 
-`dsh plugin` runs pnpm and automatically adds the package to
-`dsh.profile.bundles` when it declares `dsh.bundle` (this package does).
+`dsh plugin` runs pnpm and reconciles `dsh.profile.bundles` automatically
+because this package declares `dsh.bundle`. Restart `dsh web` — the guard is
+then active and the `safety_*` tools appear.
 
-### Option B — local `link:` dependency
+> Not published to npm yet — until then use the repository install below, or
+> publish under your own scope and install by that name.
 
-```bash
-cd ~/.dsh/profiles/web
-pnpm add "link:/abs/path/to/dsh-safety"
-# reconcile adds it to dsh.profile.bundles automatically on next boot
+### From the repository (development)
+
+```sh
+git clone https://github.com/YOUR_NAME/dsh-safety.git
+cd dsh-safety
+dsh plugin --profile web add link:$(pwd)     # symlink the repo into the profile
 ```
 
-### Option C — personal-plugin aggregate (this machine's convention)
+The `link:` protocol symlinks the repo (changes to `lib/` apply after a
+restart), unlike `file:` which copies a snapshot. `dsh plugin` reconciles the
+bundle automatically. Note: the profile directory is not a pnpm workspace, so
+any `workspace:*` deps would fall back to the npm registry — this plugin has
+no runtime deps beyond dsh's own peer packages, so no fallback is needed.
+
+### Personal-plugin aggregate
 
 If your deployment keeps personal plugins in a `dsh-personal-plugin`
 aggregate bundle, copy the directory under the aggregate root, add one insert
 row to the aggregate's `cordis.patch.yml`, add `"dsh-safety": "workspace:*"`
 to its `package.json`, then `pnpm install` in the profile dir. See
-`install.ps1` for a scripted, snapshot-and-rollback version of this path.
+`install.ps1` for a scripted snapshot → install → verify → rollback version.
 
-### Verify + restart
+### Verify & uninstall
 
 ```bash
 dsh --profile web --dump-config | grep -i dsh-safety   # row present
 dsh-safety check                                        # pre-restart gate
 # restart dsh web
+
+# uninstall:
+dsh plugin --profile web remove dsh-safety
+# restart dsh web
 ```
+
+### Install troubleshooting
+
+- **Installed, restarted, but nothing changed**: restart the whole `dsh web`
+  process — a page refresh is not enough. Confirm the row is mounted with
+  `dsh --profile web --dump-config`.
+- **`ERR_PNPM_IGNORED_BUILDS`**: pnpm blocks dependency build scripts; add
+  the listed packages to `pnpm-workspace.yaml` `allowBuilds` and re-run.
+- **pnpm release-age gate installs an old version**: pnpm 11's
+  `minimumReleaseAge` can silently pick an older publish within ~10 days; add
+  `minimumReleaseAgeExclude: ['dsh-safety']` to the profile's
+  `pnpm-workspace.yaml` and run `dsh plugin --profile web update dsh-safety`.
 
 ### Standalone CLI (no plugin install needed)
 
