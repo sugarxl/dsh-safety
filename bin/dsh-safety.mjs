@@ -2,9 +2,14 @@
 /**
  * dsh-safety CLI — the human side of the safety net.
  *
+ * dsh-safety CLI —— 安全网的人侧入口。
+ *
  * Works STANDALONE (no DSH needed): it talks to the same `$DSH_HOME/.dsh-safety`
  * state that the plugin uses, so you can undo/restore/check even when DSH is
  * down or the plugin isn't installed. Zero third-party dependencies.
+ *
+ * 独立运行（无需 DSH）：与插件读写同一个 `$DSH_HOME/.dsh-safety` 状态目录，
+ * 因此即使 DSH 无法启动或插件未安装，也能执行 undo/restore/check。零第三方依赖。
  *
  * Usage:
  *   dsh-safety status                 show state: zones, trash, snapshots, journal

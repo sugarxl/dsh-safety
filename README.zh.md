@@ -23,8 +23,8 @@
 </p>
 
 <p align="center">
-  <strong>DSH 安全兜底：拦截无脑删文件 · 删除可撤销 · 组合可回滚 · 重启前体检</strong><br>
-  <em>plugin guard · safe_delete · snapshots · pre-restart check · standalone CLI</em>
+  <strong>DeepSeek Harness 文件系统安全护栏：拦截破坏性操作 · 删除可恢复 · 组合可回滚 · 启动前校验</strong><br>
+  <em>execution-time guard · safe_delete · composition snapshots · pre-restart check · standalone CLI</em>
 </p>
 
 <div align="center">
@@ -35,11 +35,11 @@
 
 ## 是什么
 
-**DeepSeek Harness (DSH) 的安全兜底插件。** 拦截 AI 代理删除/改写会让 DSH 打不开的关键文件；让每一次删除都可恢复；把整套插件组合快照下来、一条命令回滚；重启前先体检。
+DeepSeek Harness（DSH）的文件系统安全护栏。它在工具执行边界强制一套三级文件策略：破坏性调用在执行前被拒绝、每次删除都走可恢复的回收站、插件组合可快照并回滚、重启前对组合做校验。
 
-零第三方依赖。既可以作为 DSH profile bundle 插件安装，**也可以作为独立 CLI 使用**——即使 DSH 崩了，安全网依然可用。
+零运行时依赖。既可安装为标准的 DSH profile bundle，也附带独立 CLI——DSH 本身无法启动时，恢复层依然可用。
 
-> 为什么存在：一次真实事故——脚本因 PowerShell `$HOME` 是只读变量而静默解析错路径，`Remove-Item -Recurse -Force` 删掉了一整个引擎运行根目录。那次能恢复纯属运气（被删的是**可再生成**的生成物）；**手写内容一旦被删就永远没了**。dsh-safety 把这次事故的教训编码成强制机制，而不是一句"注意安全"。
+> **背景**——护栏规则源于一次真实生产事故：脚本因 PowerShell `$HOME` 是只读变量而静默解析错路径，`Remove-Item -Recurse -Force` 删除了整个引擎运行根目录。该目录能恢复，仅因为它属于可再生成的生成内容；手写文件则会永久丢失。插件将这次事故的教训实现为强制机制，而非文档说明。
 
 ## 功能
 
@@ -66,8 +66,6 @@ dsh plugin --profile web add @suagr_xl/dsh-safety
 ```
 
 `dsh plugin` 会跑 pnpm，并因本包声明了 `dsh.bundle` 自动把它加进 `dsh.profile.bundles`。装完重启 `dsh web`，守卫即生效、`safety_*` 工具可用。
-
-> 尚未发布到 npm——在此之前用下面的仓库安装。
 
 ### 从仓库安装（开发调试）
 
@@ -120,23 +118,23 @@ CLI 与插件读写同一个 `$DSH_HOME/.dsh-safety` 状态目录，DSH 挂了�
 ## 快速上手
 
 ```bash
-# 1. 看当前保护策略
+# 1. 查看当前策略分区
 dsh-safety policy
 
-# 2. 改任何组合文件之前，先快照
+# 2. 修改任何组合文件之前，先快照
 dsh-safety snapshot before-edit
 
-# 3. 安全删除（先预览！）
+# 3. 通过安全通道删除（先预览，再执行）
 dsh-safety delete path/to/file --preview
 dsh-safety delete path/to/file
 
-# 4. 删错了？撤销
+# 4. 恢复误删
 dsh-safety trash
 dsh-safety undo <trash-id>
 
-# 5. DSH 打不开了？先体检再回滚
+# 5. 启动失败时：先校验，再回滚
 dsh-safety check
-dsh-safety status          # 看快照列表
+dsh-safety status          # 查看快照列表
 dsh-safety restore <snapshot-id> --confirm
 ```
 
@@ -221,8 +219,8 @@ dsh-safety/
 │   ├── index.js              # host 半区：工具、guard、fs 钩子、web 路由
 │   └── client.js             # browser 半区：「安全中心」设置面板
 ├── test/
-│   ├── safety.test.mjs       # 19 个单测（零依赖）
-│   └── harness.mjs           # 38 项集成检查（真实加载 @deepseek-ai 包）
+│   ├── safety.test.mjs       # 20 个单测（零依赖）
+│   └── harness.mjs           # 38 项集成检查（干净检出，零依赖）
 ├── cordis.patch.yml          # bundle 补丁（插入 dsh-safety 行）
 ├── package.json              # dsh.bundle + dsh.client + bin
 ├── install.ps1 / recover.ps1 # 本地便捷脚本（快照→安装→校验→回滚）
@@ -233,8 +231,8 @@ dsh-safety/
 ## 测试
 
 ```bash
-node --test test/safety.test.mjs   # 19 个单测，零依赖
-node test/harness.mjs              # 38 项集成检查（需真实 @deepseek-ai 包）
+node --test test/safety.test.mjs   # 20 个单测，零依赖
+node test/harness.mjs              # 38 项集成检查，干净检出（无需 @deepseek-ai）
 npm run check                      # 语法检查
 ```
 
@@ -242,7 +240,7 @@ npm run check                      # 语法检查
 
 - **改完插件后 DSH 打不开**：跑 `dsh-safety check` 找乱码/JSON/重复 id；`dsh --profile web --dump-default-config` 看不带用户层的 bundle 层；`dsh-safety restore <id> --confirm` 回滚快照。
 - **守卫拦了合法操作**：守卫从不拦读和插件源码编辑；它拦的是 `$HOME`/插件/配置区的删除——用 `safe_delete`（可撤销）代替裸 `rm`。
-- **确实要删受保护路径**：`safe_delete` 加 `force:true`（或 `dsh-safety delete --force`）——仍然只进回收站，永不真正删除。
+- **需要删除受保护路径**：`safe_delete` 加 `force:true`（或 `dsh-safety delete --force`）——仍然只进回收站，永不真正删除。
 
 ## 安全
 

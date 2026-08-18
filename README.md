@@ -23,8 +23,8 @@ English | [中文](README.zh.md)
 </p>
 
 <p align="center">
-  <strong>DSH 安全兜底：拦截无脑删文件 · 删除可撤销 · 组合可回滚 · 重启前体检</strong><br>
-  <em>plugin guard · safe_delete · snapshots · pre-restart check · standalone CLI</em>
+  <strong>DeepSeek Harness 文件系统安全护栏：拦截破坏性操作 · 删除可恢复 · 组合可回滚 · 启动前校验</strong><br>
+  <em>execution-time guard · safe_delete · composition snapshots · pre-restart check · standalone CLI</em>
 </p>
 
 <div align="center">
@@ -35,20 +35,23 @@ English | [中文](README.zh.md)
 
 ## What
 
-**A safety harness for DeepSeek Harness (DSH).** Stops the AI agent from
-deleting or rewriting the files that make DSH unbootable, makes every delete
-recoverable, snapshots the whole plugin composition for one-command rollback,
-and checks the composition before you restart.
+A filesystem safety harness for DeepSeek Harness (DSH). It enforces a
+three-tier file policy at the tool-execution boundary: destructive agent calls
+are denied before they run, every delete is routed through a recoverable
+trash, the plugin composition can be snapshotted and rolled back, and the
+composition is validated before a restart.
 
-Zero third-party dependencies. Works as a DSH profile bundle plugin **and** as
-a standalone CLI — so the safety net is usable even when DSH is down.
+The package has zero runtime dependencies. It installs as a standard DSH
+profile bundle and also ships a standalone CLI, so the recovery layer remains
+usable when DSH itself will not start.
 
-> Why this exists: a real incident — a script silently resolved the wrong
-> path (PowerShell's `$HOME` is read-only) and `Remove-Item -Recurse -Force`
-> deleted an entire engine runtime root. The only reason it was recoverable is
-> that the deleted directory was *generated* content. Anything hand-authored
-> would have been gone forever. dsh-safety encodes the lessons of that
-> incident as enforced mechanisms, not advice.
+> **Background** — the guard rules are derived from a real production
+> incident: a script silently resolved the wrong path (PowerShell's `$HOME`
+> is read-only) and `Remove-Item -Recurse -Force` deleted an entire engine
+> runtime root. The directory was recoverable only because it was generated
+> content; hand-authored files would have been lost permanently. The plugin
+> turns the lessons of that incident into enforced mechanisms rather than
+> documentation.
 
 ## Features
 
@@ -105,8 +108,6 @@ dsh plugin --profile web add @suagr_xl/dsh-safety
 `dsh plugin` runs pnpm and reconciles `dsh.profile.bundles` automatically
 because this package declares `dsh.bundle`. Restart `dsh web` — the guard is
 then active and the `safety_*` tools appear.
-
-> Not published to npm yet — until then use the repository install below.
 
 ### From the repository (development)
 
@@ -175,21 +176,21 @@ can undo/restore from your terminal even if DSH is down.
 ## Quick start
 
 ```bash
-# 1. See what's protected
+# 1. Inspect the effective policy zones
 dsh-safety policy
 
-# 2. Before touching any composition file, snapshot
+# 2. Snapshot before editing any composition file
 dsh-safety snapshot before-edit
 
-# 3. Delete the safe way (preview first!)
+# 3. Delete through the safe channel (preview first, then execute)
 dsh-safety delete path/to/file --preview
 dsh-safety delete path/to/file
 
-# 4. Oops — undo it
+# 4. Recover a delete
 dsh-safety trash
 dsh-safety undo <trash-id>
 
-# 5. DSH won't boot? Check then roll back
+# 5. Boot failure: validate, then roll back
 dsh-safety check
 dsh-safety status          # list snapshots
 dsh-safety restore <snapshot-id> --confirm
@@ -288,8 +289,8 @@ dsh-safety/
 │   ├── index.js              # host half: tools, guard, fs hooks, web route
 │   └── client.js             # browser half: "Safety Center" settings panel
 ├── test/
-│   ├── safety.test.mjs       # 19 unit tests (zero deps)
-│   └── harness.mjs           # 38 integration checks (loads @deepseek-ai)
+│   ├── safety.test.mjs       # 20 unit tests (zero deps)
+│   └── harness.mjs           # 38 integration checks (clean checkout, zero deps)
 ├── cordis.patch.yml          # bundle patch (inserts the dsh-safety row)
 ├── package.json              # dsh.bundle + dsh.client + bin
 ├── install.ps1 / recover.ps1 # local convenience scripts (snapshot→install→verify→rollback)
@@ -300,8 +301,8 @@ dsh-safety/
 ## Testing
 
 ```bash
-node --test test/safety.test.mjs   # 19 unit tests, zero dependencies
-node test/harness.mjs              # 38 integration checks against real @deepseek-ai packages
+node --test test/safety.test.mjs   # 20 unit tests, zero dependencies
+node test/harness.mjs              # 38 integration checks, clean checkout (no @deepseek-ai needed)
 npm run check                      # syntax checks
 ```
 
@@ -314,9 +315,9 @@ npm run check                      # syntax checks
 - **The guard blocks something legitimate**: the guard never blocks reads or
   edits of plugin sources; it blocks deletes on `$HOME`/plugin/config zones —
   use `safe_delete` (undoable) instead of raw `rm`.
-- **I want to delete something on a protected path**: `safe_delete` with
-  `force:true` (or `dsh-safety delete --force`) — it still goes to trash,
-  never permanent.
+- **A protected path needs to be deleted**: `safe_delete` with
+  `force:true` (or `dsh-safety delete --force`) — the item still goes to
+  trash, never permanent.
 
 ## Security
 
