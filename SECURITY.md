@@ -7,7 +7,7 @@ find a way to bypass the guard (e.g. a shell delete that slips through, or a
 path that is not classified as protected/confirm), please report it privately
 **before** opening a public issue:
 
-- Open a [GitHub Security Advisory](https://github.com/YOUR_NAME/dsh-safety/security/advisories/new)
+- Open a [GitHub Security Advisory](https://github.com/OWNER/dsh-safety/security/advisories/new)
 - or email the maintainers (address TBD)
 
 Please include: the DSH version, the plugin version, a minimal reproduction

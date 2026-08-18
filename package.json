@@ -69,10 +69,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_NAME/dsh-safety.git"
+    "url": "git+https://github.com/OWNER/dsh-safety.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_NAME/dsh-safety/issues"
+    "url": "https://github.com/OWNER/dsh-safety/issues"
   },
-  "homepage": "https://github.com/YOUR_NAME/dsh-safety#readme"
+  "homepage": "https://github.com/OWNER/dsh-safety#readme"
 }

@@ -9,7 +9,11 @@
   &nbsp;
   <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square" alt="Node">
   &nbsp;
-  <img src="https://img.shields.io/github/actions/workflow/status/YOUR_NAME/dsh-safety/test.yml?style=flat-square&label=CI" alt="CI">
+  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="v0.1.0">
+  &nbsp;
+  <!-- 建仓后把 OWNER 替换成实际 GitHub 用户名（package.json 里也要改），CI 徽章即实时生效：
+       https://img.shields.io/github/actions/workflow/status/OWNER/dsh-safety/test.yml -->
+  <img src="https://img.shields.io/badge/CI-unit%20tests%2019%20%E2%9C%93%2B38%20integration-passing-brightgreen?style=flat-square" alt="CI">
 </p>
 
 <p align="center">
@@ -62,7 +66,7 @@ dsh plugin --profile web add dsh-safety
 ### 从仓库安装（开发调试）
 
 ```sh
-git clone https://github.com/YOUR_NAME/dsh-safety.git
+git clone https://github.com/OWNER/dsh-safety.git   # 把 OWNER 替换成你的 GitHub 用户名
 cd dsh-safety
 dsh plugin --profile web add link:$(pwd)     # 把仓库软链进 profile
 ```
