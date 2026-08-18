@@ -62,7 +62,7 @@ DeepSeek Harness（DSH）的文件系统安全护栏。它在工具执行边界�
 ### 从 npm 安装（推荐）
 
 ```sh
-dsh plugin --profile web add @suagr_xl/dsh-safety
+dsh plugin --profile web add @suagr_xl/dsh-safety   # 从官方 npm registry 安装 / install from the official npm registry
 ```
 
 `dsh plugin` 会跑 pnpm，并因本包声明了 `dsh.bundle` 自动把它加进 `dsh.profile.bundles`。装完重启 `dsh web`，守卫即生效、`safety_*` 工具可用。
@@ -70,9 +70,9 @@ dsh plugin --profile web add @suagr_xl/dsh-safety
 ### 从仓库安装（开发调试）
 
 ```sh
-git clone https://github.com/sugarxl/dsh-safety.git
-cd dsh-safety
-dsh plugin --profile web add link:$(pwd)     # 把仓库软链进 profile
+git clone https://github.com/sugarxl/dsh-safety.git   # 克隆仓库 / clone the repo
+cd dsh-safety                                         # 进入目录 / enter the directory
+dsh plugin --profile web add link:$(pwd)              # 把仓库软链进 profile / symlink the repo into the profile
 ```
 
 用 `link:` 是软链（改 `lib/` 重启即生效），`file:` 则是复制快照。`dsh plugin` 会自动 reconcile 进 bundles。注意：profile 目录不是 pnpm workspace，`workspace:*` 依赖会回退到 npm 仓库——本插件**完全没有运行时依赖**（import 只有 Node 内置 + 自己的 `safety-core.mjs`），所以裸 `link:` 安装不需要它自己的 `node_modules`，也不存在回退问题。
@@ -82,8 +82,8 @@ dsh plugin --profile web add link:$(pwd)     # 把仓库软链进 profile
 两种方式都走官方 `dsh plugin` 机制，装完无需任何手工配置：
 
 ```
-$DSH_HOME/profiles/<name>/package.json                # 新增依赖 + dsh.profile.bundles
-$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # 安装的包本体
+$DSH_HOME/profiles/<name>/package.json                # 新增依赖 + dsh.profile.bundles / dependency + dsh.profile.bundles
+$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # 安装的包本体 / installed package
 ```
 
 bundle 层在启动时从包内的 `cordis.patch.yml` 读取。`dsh-safety` 这个行 id 只能出现在这一个层（包内文件）——**不要**再写进 profile 或 home 的 `cordis.patch.yml`。
@@ -91,19 +91,19 @@ bundle 层在启动时从包内的 `cordis.patch.yml` 读取。`dsh-safety` 这�
 ### 验证与卸载
 
 ```bash
-dsh --profile web --dump-config | grep -i dsh-safety   # 确认行出现
-dsh-safety check                                        # 重启前体检
-# 重启 dsh web
+dsh --profile web --dump-config | grep -i dsh-safety   # 确认行出现 / row present
+dsh-safety check                                        # 重启前体检 / pre-restart gate
+# 重启 dsh web / restart dsh web
 
-# 卸载：
+# 卸载：/ uninstall:
 dsh plugin --profile web remove @suagr_xl/dsh-safety
-# 重启 dsh web
+# 重启 dsh web / restart dsh web
 ```
 
 ### 独立 CLI（不装插件也能用）
 
 ```bash
-npm link   # 或直接: node bin/dsh-safety.mjs ...
+npm link   # 或直接: node bin/dsh-safety.mjs ... / or directly: node bin/dsh-safety.mjs ...
 dsh-safety status
 ```
 

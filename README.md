@@ -102,7 +102,7 @@ Node.js >= 22 and pnpm.
 ### From npm (recommended)
 
 ```sh
-dsh plugin --profile web add @suagr_xl/dsh-safety
+dsh plugin --profile web add @suagr_xl/dsh-safety   # install from the official npm registry / 从官方 npm registry 安装
 ```
 
 `dsh plugin` runs pnpm and reconciles `dsh.profile.bundles` automatically
@@ -112,9 +112,9 @@ then active and the `safety_*` tools appear.
 ### From the repository (development)
 
 ```sh
-git clone https://github.com/sugarxl/dsh-safety.git
-cd dsh-safety
-dsh plugin --profile web add link:$(pwd)     # symlink the repo into the profile
+git clone https://github.com/sugarxl/dsh-safety.git   # clone the repo / 克隆仓库
+cd dsh-safety                                         # enter the directory / 进入目录
+dsh plugin --profile web add link:$(pwd)              # symlink the repo into the profile / 把仓库软链进 profile
 ```
 
 The `link:` protocol symlinks the repo (changes to `lib/` apply after a
@@ -131,8 +131,8 @@ Both installs go through the official `dsh plugin` mechanism — nothing else to
 configure:
 
 ```
-$DSH_HOME/profiles/<name>/package.json                # + dependency + dsh.profile.bundles
-$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # the installed package
+$DSH_HOME/profiles/<name>/package.json                # + dependency + dsh.profile.bundles / 新增依赖 + dsh.profile.bundles
+$DSH_HOME/profiles/<name>/node_modules/dsh-safety/    # the installed package / 安装的包本体
 ```
 
 The bundle layer is read at boot from the package's own `cordis.patch.yml`.
@@ -142,13 +142,13 @@ to the profile or home `cordis.patch.yml`.
 ### Verify & uninstall
 
 ```bash
-dsh --profile web --dump-config | grep -i dsh-safety   # row present
-dsh-safety check                                        # pre-restart gate
-# restart dsh web
+dsh --profile web --dump-config | grep -i dsh-safety   # row present / 确认行出现
+dsh-safety check                                        # pre-restart gate / 重启前体检
+# restart dsh web / 重启 dsh web
 
-# uninstall:
+# uninstall: / 卸载：
 dsh plugin --profile web remove @suagr_xl/dsh-safety
-# restart dsh web
+# restart dsh web / 重启 dsh web
 ```
 
 ### Install troubleshooting

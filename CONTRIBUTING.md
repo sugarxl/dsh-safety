@@ -5,12 +5,9 @@
 ## 开发
 
 ```bash
-node --test test/safety.test.mjs   # 纯逻辑单测（零依赖，任何环境可跑）
-npm run check                      # 语法检查
-node test/harness.mjs              # 集成检查（需要真实 @deepseek-ai 包：
-                                   #   在 dsh 环境里跑，或建一个指向
-                                   #   profiles/node_modules/@deepseek-ai 的
-                                   #   node_modules/@deepseek-ai junction）
+node --test test/safety.test.mjs   # 纯逻辑单测（零依赖，任何环境可跑） / pure-logic unit tests (zero deps, run anywhere)
+npm run check                      # 语法检查 / syntax checks
+node test/harness.mjs              # 集成检查（干净检出、零依赖、无需 junction） / integration checks (clean checkout, zero deps, no junction needed)
 ```
 
 ## 提交要求
@@ -20,7 +17,7 @@ node test/harness.mjs              # 集成检查（需要真实 @deepseek-ai �
 - **fail-soft 铁律**：插件在任何环境下都不允许让 DSH 启动失败——新增代码若可能抛错，必须包进降级路径。
 - 改 `README.md` 后必须同步 `README.zh.md`，并用以下命令更新 `README.i18n.yaml`：
   ```bash
-  git hash-object README.md README.zh.md
+  git hash-object README.md README.zh.md   # 重新生成双语一致性哈希 / regenerate the bilingual-consistency hashes
   ```
 - 保持零外部依赖：`lib/` 的 import 只允许 Node 内置 + 仓库内模块——**不要** import `@deepseek-ai/*`（裸 `link:` 安装没有自带 `node_modules`，会启动失败）。
 - 每次修改后跑 `node test/harness.mjs`（无需 junction、干净检出即可通过）。

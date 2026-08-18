@@ -24,9 +24,9 @@
 
 能。CLI（`dsh-safety`）完全不依赖 DSH，直接读写 `$DSH_HOME/.dsh-safety` 状态：
 ```bash
-dsh-safety check                      # 找乱码/JSON/重复 id
-dsh-safety status                     # 看可用快照
-dsh-safety restore <id> --confirm     # 回滚
+dsh-safety check                      # 找乱码/JSON/重复 id / find mojibake/JSON/duplicate ids
+dsh-safety status                     # 看可用快照 / list available snapshots
+dsh-safety restore <id> --confirm     # 回滚 / roll back
 ```
 
 ## 模型用 `run_code` 执行任意代码，会不会绕过？
