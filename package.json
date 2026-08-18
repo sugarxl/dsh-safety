@@ -4,6 +4,9 @@
   "description": "A safety harness plugin for DeepSeek Harness (DSH): protected-path enforcement, trash-based safe_delete with undo, last-known-good composition snapshots, pre-restart composition checks, and an audit journal.",
   "type": "module",
   "main": "lib/index.js",
+  "bin": {
+    "dsh-safety": "./bin/dsh-safety.mjs"
+  },
   "exports": {
     ".": {
       "default": "./lib/index.js"
@@ -15,15 +18,19 @@
   },
   "files": [
     "lib/",
+    "bin/",
     "cordis.patch.yml",
     "README.md",
+    "README.zh.md",
+    "README.i18n.yaml",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "SECURITY.md"
   ],
   "scripts": {
     "test": "node --test test/safety.test.mjs",
     "test:harness": "node test/harness.mjs",
-    "check": "node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/client.js && node --check bin/dsh-safety.mjs"
   },
   "keywords": [
     "deepseek-harness",

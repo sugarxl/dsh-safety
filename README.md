@@ -1,126 +1,251 @@
 # dsh-safety
 
-一个针对 DeepSeek Harness (DSH) 的**个人安全插件**：把"AI/工具无脑删文件、改配置把 DSH 搞到打不开、装插件把 GUI 弄崩"这类问题兜住。不依赖任何第三方包（只用 dsh 自带的 `@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-fs`）。
+English | [中文](README.zh.md)
 
-> ⚠️ 教训：本插件就是为一次真实事故写的——一条脚本因 PowerShell `$HOME` 只读变量把路径错位，`Remove-Item -Recurse -Force` 删掉了一个真实的引擎运行根目录。如果当时有这个插件的 guard + safe_delete + 快照，事故会被拦截或一键撤销。那次能恢复只因为被删目录是**可再生成的**（链接指向真实内容）；**自定义内容一旦被删就无可挽回**——这正是本插件存在的意义。
+**A safety harness for DeepSeek Harness (DSH).** Stops the AI agent from
+deleting or rewriting the files that make DSH unbootable, makes every delete
+recoverable, snapshots the whole plugin composition for one-command rollback,
+and checks the composition before you restart.
 
-## 它能做什么
+Zero third-party dependencies. Works as a DSH profile bundle plugin **and** as
+a standalone CLI — so the safety net is usable even when DSH is down.
 
-### 1. 强制拦截（不是提示词劝告，是执行前拒绝）
+> Why this exists: a real incident — a script silently resolved the wrong
+> path (PowerShell's `$HOME` is read-only) and `Remove-Item -Recurse -Force`
+> deleted an entire engine runtime root. The only reason it was recoverable is
+> that the deleted directory was *generated* content. Anything hand-authored
+> would have been gone forever. dsh-safety encodes the lessons of that
+> incident as enforced mechanisms, not advice.
 
-注册 `ctx.tools.guard()` 单调守卫，在**任何工具真正执行前**检查：
+## Features
 
-| 操作 | 路径 / 场景 | 结果 |
-|---|---|---|
-| **递归删除目录**（`rm -r/-rf`、`Remove-Item -Recurse`、`rd /s`、`rmdir`、`shutil.rmtree`、`fs.rm recursive`） | **任何路径** | ❌ **一律拒绝** → 强制走 `safe_delete`（事故原型：`Remove-Item -Recurse -Force` 删掉整目录） |
-| `write` / `edit` / `str_replace_editor` | protected 区（profile 的 `package.json`、`cordis.patch.yml`、`cordis.yml`、lockfile、`node_modules`、安装目录、home 级 `cordis.patch.yml`/`settings.yaml`） | ❌ 拒绝 |
-| 删除命令命中 confirm 区（**`$HOME` 整区**、`profiles/*/plugins`、`.agent-presets`） | — | ❌ 拒绝 → 用 `safe_delete`（force 仍只进回收站） |
-| 非递归删除 | 普通自由路径 | ✅ 放行（记审计日志） |
-| 插件源码编辑（`profiles/*/plugins/.../lib/*.js`） | — | ✅ 放行（正常开发流） |
+- **Execution-time guard** (`ctx.tools.guard`): denies destructive tool calls
+  *before* they run.
+  - **Recursive directory deletes are blocked everywhere** (`rm -r/-rf`,
+    `Remove-Item -Recurse`, `rd /s`, `rmdir`, `shutil.rmtree`,
+    `fs.rm recursive`) — no matter which path, routed to `safe_delete`.
+  - `write`/`edit`/`str_replace_editor` on **protected** paths (profile
+    `package.json`, `cordis.patch.yml`, `cordis.yml`, lockfiles,
+    `node_modules`, the deployment install dir, home patch/settings) are
+    denied.
+  - Deletes on **confirm** zones (the whole OS home dir, plugin sources,
+    agent presets) are denied and routed to `safe_delete`.
+- **`safe_delete`** — the only sanctioned delete channel. Moves to a trash
+  directory (recoverable via `safety_undo`), `preview:true` shows what would
+  be removed first, refuses filesystem roots and its own state dir, and
+  journals every delete.
+- **Composition snapshots** — `safety_snapshot` saves the whole plugin
+  composition (per-profile manifests, patches, lockfiles, plugin
+  `package.json` + `cordis.patch.yml`, agent presets) with SHA-256 hashes;
+  `safety_restore` rolls back to a last-known-good state (current files are
+  backed up first). Credential-bearing files are excluded by default.
+- **Pre-restart check** — `safety_check` validates UTF-8, detects mojibake
+  (wrong-encoding round-trips, the classic "DSH won't open" cause), JSON
+  parse errors, and **duplicate plugin row ids across patch layers** (the
+  "one row, one layer" rule).
+- **Audit journal + web panel** — every block/delete/snapshot/restore is
+  journaled; a "Safety Center" settings section shows trash, snapshots,
+  journal, and one-click restore/rollback.
+- **Standalone CLI** — `dsh-safety` works without DSH: delete/undo/snapshot/
+  restore/check from your own terminal, even when DSH won't boot.
 
-第二道防线：`fs/write-intent` / `fs/edit-intent` 瀑布钩子，任何途径的写/改 protected 路径都会抛 `FS_DENIED`。
+## Install
 
-### 2. safe_delete —— 删除永远可撤销、先预览
+The plugin is a standard DSH profile bundle. Pick one:
 
-删除一律走 `safe_delete`（进 `$DSH_HOME/.dsh-safety/trash/`，带时间戳 + 原路径 + 操作者），`safety_undo` 一键还原。受保护/confirm 路径需 `force:true`，**但即便如此也进回收站、永不真正删除**。
+### Option A — install into any profile via `dsh plugin` (recommended)
 
-- **`preview:true`**：只描述将删除什么（文件大小 / 目录条目数 + 顶层名单），**不动任何文件**——删之前先看。
-- 目录删除的结果里始终附上内容清单。
-- **绝对拒绝**：文件系统根（`C:\`）、DSH 状态根、以及插件自己的 `.dsh-safety` 状态目录（回收站/快照/日志所在地），`force` 也不行。
-- 删除事件全部记入审计日志。
+```bash
+# from the repo root
+dsh plugin --profile web add file:$(pwd)
+# or with an absolute path:
+#   dsh plugin --profile web add file:/abs/path/to/dsh-safety
+```
 
-### 3. 快照 / 回滚（last-known-good）
+`dsh plugin` runs pnpm and automatically adds the package to
+`dsh.profile.bundles` when it declares `dsh.bundle` (this package does).
 
-`safety_snapshot` 把整套组合（每个 profile 的 `package.json`/`cordis.patch.yml`/`cordis.yml`/lockfile、home 补丁与设置、所有插件的 `package.json`+`cordis.patch.yml`、agent-preset 组合）带 SHA-256 存进 `$DSH_HOME/.dsh-safety/snapshots/`。改任何组合/插件文件**之前**先快照；启动失败后 `safety_restore`（需 `confirm:true`，现行文件先自动备份）一键回滚。
+### Option B — local `link:` dependency
 
-### 4. safety_check —— 重启前体检（"打不开"的预防）
+```bash
+cd ~/.dsh/profiles/web
+pnpm add "link:/abs/path/to/dsh-safety"
+# reconcile adds it to dsh.profile.bundles automatically on next boot
+```
 
-检查每个组合/配置文件：UTF-8 合法性、**乱码检测**（GBK→UTF-8 错误往返，就是真实发生过的 `鈥?` 事故）、JSON 可解析性、补丁行 id 扫描、**跨层重复 id**（"同一插件行只能出现在一个层"规则）。启动前跑一遍，FAIL 先修再重启。
+### Option C — personal-plugin aggregate (this machine's convention)
 
-### 5. 审计日志 + 安全中心面板
+If your deployment keeps personal plugins in a `dsh-personal-plugin`
+aggregate bundle, copy the directory under the aggregate root, add one insert
+row to the aggregate's `cordis.patch.yml`, add `"dsh-safety": "workspace:*"`
+to its `package.json`, then `pnpm install` in the profile dir. See
+`install.ps1` for a scripted, snapshot-and-rollback version of this path.
 
-- `safety_journal`：回收站、快照、拦截、还原全部留痕。
-- `safety_status`：受保护根、拦截计数、回收站/快照数量、最近日志。
-- 设置页新增「安全中心」分区（浏览器半区），可视化回收站/快照/日志，可一键还原、回滚、体检。
+### Verify + restart
 
-## 工具一览
+```bash
+dsh --profile web --dump-config | grep -i dsh-safety   # row present
+dsh-safety check                                        # pre-restart gate
+# restart dsh web
+```
 
-| 工具 | 作用 |
+### Standalone CLI (no plugin install needed)
+
+```bash
+npm link   # or: node bin/dsh-safety.mjs ...
+dsh-safety status
+```
+
+The CLI reads the same `$DSH_HOME/.dsh-safety` state the plugin uses, so you
+can undo/restore from your terminal even if DSH is down.
+
+## Quick start
+
+```bash
+# 1. See what's protected
+dsh-safety policy
+
+# 2. Before touching any composition file, snapshot
+dsh-safety snapshot before-edit
+
+# 3. Delete the safe way (preview first!)
+dsh-safety delete path/to/file --preview
+dsh-safety delete path/to/file
+
+# 4. Oops — undo it
+dsh-safety trash
+dsh-safety undo <trash-id>
+
+# 5. DSH won't boot? Check then roll back
+dsh-safety check
+dsh-safety status          # list snapshots
+dsh-safety restore <snapshot-id> --confirm
+```
+
+## CLI reference
+
+```
+dsh-safety status                  state: trash, snapshots, journal
+dsh-safety delete <path> [--force] [--preview]
+dsh-safety trash [--limit N]
+dsh-safety undo <id>
+dsh-safety snapshot [label] [--exclude a,b]
+dsh-safety restore <id> --confirm
+dsh-safety check                   exit 1 on failure (CI-friendly)
+dsh-safety journal [n]
+dsh-safety policy                  effective policy zones
+dsh-safety help
+```
+
+`--home <path>` overrides the state root (`$DSH_HOME` or `~/.dsh` by default).
+
+## Model-facing tools (when installed as a plugin)
+
+| Tool | Purpose |
 |---|---|
-| `safe_delete` | 删除进回收站（可撤销；**`preview:true` 先预览**；confirm/受保护路径需 `force`，仍非永久；拒绝根/状态目录） |
-| `safety_trash` / `safety_undo` | 列出回收站 / 还原某个条目 |
-| `safety_snapshot` / `safety_restore` | 快照整套组合 / 从快照回滚（需 `confirm:true`） |
-| `safety_check` | 重启前体检（UTF-8/乱码/JSON/重复 id） |
-| `safety_journal` / `safety_status` | 审计日志 / 当前状态（含 guard 是否武装、各策略区） |
+| `safe_delete` | trash-based delete (preview / force / undoable) |
+| `safety_trash` / `safety_undo` | list trash / restore an item |
+| `safety_snapshot` / `safety_restore` | snapshot composition / rollback (`confirm:true`) |
+| `safety_check` | pre-restart validation (UTF-8 / mojibake / JSON / duplicate ids) |
+| `safety_journal` / `safety_status` | audit log / state |
 
-## 默认策略（三级）
+## Configuration
 
-```
-blockWrite（禁写禁删）:
-  <DSH_HOME>/profiles/<name>/{package.json,cordis.patch.yml,cordis.yml,pnpm-workspace.yaml,pnpm-lock.yaml}
-  <DSH_HOME>/profiles/<name>/node_modules
-  <DSH_HOME>/profiles/node_modules
-  <DSH_HOME>/cordis.patch.yml  <DSH_HOME>/settings.yaml
-  部署安装目录（AppData\Roaming\npm\node_modules\@deepseek-ai\dsh）
+Configure via the bundle row in a patch layer (e.g. the profile's
+`cordis.patch.yml`):
 
-confirmDelete（禁删、允许编辑；删除须 safe_delete force，仍只进回收站）:
-  $HOME（OS 用户主目录，整区）—— 事故复盘：被误删的目录正属此区
-  <DSH_HOME>/profiles（含 plugins 插件源码，可编辑）
-  <DSH_HOME>/.agent-presets
-```
-
-可在补丁行配置追加 `blockWriteRoots` / `confirmDeleteRoots`（旧名 `blockDeleteRoots` 兼容），或关闭某道防线（`blockWrites: false` / `blockShellDestructive: false` / `audit: false` / `homeIsConfirm: false`）。
-
-## 安装（个人插件，按本机统一规则）
-
-**个人插件统一收进聚合包** `profiles/web/plugins/dsh-personal-plugin/`，子插件直接放聚合包根下，行只插入聚合包的 `cordis.patch.yml` **一次**：
-
-```powershell
-# 1) 复制到聚合包根下（直接在聚合包根，不要套 plugins/ 子目录）
-Copy-Item -Recurse .\dsh-safety "$env:USERPROFILE\.dsh\profiles\web\plugins\dsh-personal-plugin\dsh-safety"
-
-# 2) 在聚合包 cordis.patch.yml 追加一行（先确认没有重复）
-#    - insert:
-#        - id: dsh-safety
-#          name: dsh-safety
-
-# 3) 聚合包 package.json 的 dependencies 加
-#    "dsh-safety": "workspace:*"
-
-# 4) 在 profiles/web 目录跑
-pnpm install
-
-# 5) 重启前体检 + 验证
-dsh --profile web --dump-config | findstr dsh-safety
-# 6) 重启 dsh web
+```yaml
+- id: dsh-safety
+  config:
+    blockWriteRoots: ["C:\\extra\\protected"]
+    confirmDeleteRoots: ["D:\\data"]
+    snapshotExclude: ["settings.yaml", ".credentials.yaml"]
+    blockWrites: true
+    blockShellDestructive: true
+    audit: true
+    keepTrash: 200
+    keepSnapshots: 10
 ```
 
-**推荐用 `install.ps1`**：自动先快照 → 复制 → 改两处 → pnpm install → dump-config 校验 → 失败自动回滚（详见下文）。
+| Field | Default | Meaning |
+|---|---|---|
+| `blockWriteRoots` | profile manifests/patches/lockfiles/node_modules, install dir, home patch/settings | no write/edit/delete |
+| `confirmDeleteRoots` | `$HOME`, `profiles/*`, `.agent-presets` | no delete without `force` (still trash-only) |
+| `snapshotExclude` | `["settings.yaml", ".credentials.yaml"]` | files never copied into snapshots |
+| `blockWrites` | `true` | enable the write/edit guard |
+| `blockShellDestructive` | `true` | enable the shell-delete guard |
+| `audit` | `true` | journal destructive tool calls |
+| `keepTrash` / `keepSnapshots` | `200` / `10` | retention limits |
 
-## 测试
+## How it works
 
-```sh
-node --test test/safety.test.mjs   # 14 个纯逻辑单元测试
-node test/harness.mjs              # 38 项真实加载 @deepseek-ai 包的 apply() 集成检查
+Three-tier policy:
+
+| Tier | Allowed | Denied | Default coverage |
+|---|---|---|---|
+| `protected` | read | write / edit / delete | profile `package.json`/`cordis.patch.yml`/`cordis.yml`/lockfiles/`node_modules`, install dir, home patch & settings |
+| `confirm` | read, edit | delete (needs `safe_delete --force`, still trash-only) | entire `$HOME`, plugin sources, agent presets |
+| `free` | read/write/delete | recursive delete | regular workspace files |
+
+The guard decision chain, per tool call: destructive verb? → is it a
+recursive delete? → does an explicit path hit a protected/confirm zone? → does
+the command text hit a protected marker (`~`/relative forms)? → recursive
+deletes are denied **everywhere** as a final rule. Denials are journaled and
+returned to the model as errors (never a crash).
+
+A second layer hooks the `fs/write-intent` / `fs/edit-intent` waterfalls and
+throws `FS_DENIED` on protected paths regardless of which tool writes.
+
+## Structure
+
+```
+dsh-safety/
+├── bin/
+│   └── dsh-safety.mjs        # standalone CLI (zero deps)
+├── lib/
+│   ├── safety-core.mjs       # pure logic: policy/guard/trash/snapshot/check
+│   ├── index.js              # host half: tools, guard, fs hooks, web route
+│   └── client.js             # browser half: "Safety Center" settings panel
+├── test/
+│   ├── safety.test.mjs       # 14 unit tests (zero deps)
+│   └── harness.mjs           # 38 integration checks (loads @deepseek-ai)
+├── cordis.patch.yml          # bundle patch (inserts the dsh-safety row)
+├── package.json              # dsh.bundle + dsh.client + bin
+├── install.ps1 / recover.ps1 # local convenience scripts (snapshot→install→verify→rollback)
+├── README.md / README.zh.md  # docs (bilingual, officially paired)
+└── LICENSE / NOTICE / SECURITY.md
 ```
 
-## 文件
+## Testing
 
-- `lib/safety-core.mjs` — 纯逻辑（保护路径/删除识别/乱码/JSON/重复 id/回收站/快照/校验），零依赖，可单测
-- `lib/index.js` — host 半区：工具注册 + guard + fs 瀑布 + 审计 + `/safety/api` 路由
-- `lib/client.js` — browser 半区：「安全中心」设置页
-- `cordis.patch.yml` / `package.json` — bundle 插件清单
-- `test/safety.test.mjs` / `test/harness.mjs` — 测试
-- `install.ps1` / `recover.ps1` — 安全安装（快照→装→验→回滚）/ 启动失败急救
+```bash
+node --test test/safety.test.mjs   # 14 unit tests, zero dependencies
+node test/harness.mjs              # 38 integration checks against real @deepseek-ai packages
+npm run check                      # syntax checks
+```
 
-## 已知边界（诚实说明）
+## Troubleshooting
 
-- **shell 删除是"软拦截"**：`tools.guard` 只能拦截模型工具调用（`pwsh`/`bash` 命令文本命中破坏性动词 + 路径/标记）；若用户自己在真实终端执行删除，插件拦不住——但 safe_delete + 快照仍可事后恢复。
-- **递归删除识别靠命令文本**：`isRecursiveDelete` 匹配常见写法（`-Recurse`/`-r`/`-rf`/`/s`/`shutil.rmtree`/`fs.rm recursive`）。冷门的等价写法（如 `Get-ChildItem | Remove-Item` 管道）可能漏判——但路径命中 confirm/protected 区仍会被拦。
-- `safety_check` 的补丁解析是**行级扫描**（非完整 YAML 解析器），能抓重复 id / 乱码 / JSON 错误，但复杂 `!!js` 表达式运行时错误只能靠 `--dump-config` 兜底。
-- confirm 区（尤其 `$HOME`）的**编辑不受限**——只限制删除。这是有意为之：不能因保护而阻塞正常开发。
-- 普通项目文件（不在 `$HOME`/DSH 目录下的工作区）只受"递归删除拦截 + safe_delete 习惯"保护。
+- **DSH won't boot after a plugin change**: run `dsh-safety check` to find
+  mojibake / JSON / duplicate-id problems; `dsh --profile web
+  --dump-default-config` to see the bundle layer without the user layer;
+  `dsh-safety restore <id> --confirm` to roll back a snapshot.
+- **The guard blocks something legitimate**: the guard never blocks reads or
+  edits of plugin sources; it blocks deletes on `$HOME`/plugin/config zones —
+  use `safe_delete` (undoable) instead of raw `rm`.
+- **I want to delete something on a protected path**: `safe_delete` with
+  `force:true` (or `dsh-safety delete --force`) — it still goes to trash,
+  never permanent.
+
+## Security
+
+See [SECURITY.md](SECURITY.md). In short: the guard intercepts **model tool
+calls**, not commands you run in your own terminal; `safety_check` is a
+line-level scanner, not a full YAML parser. It is a safety net, not a sandbox
+— configure DSH's own sandbox/approval for real containment, and use this
+plugin for the recovery layer DSH lacks.
 
 ## License
 
-MIT。
+MIT. Integration patterns modeled after DeepSeek Harness (MIT); see
+[NOTICE](NOTICE).
