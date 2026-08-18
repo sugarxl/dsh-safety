@@ -291,9 +291,19 @@ test('guard scans run_code bodies for destructive protected calls', () => {
   // shutil.rmtree on a protected marker
   const d2 = destructiveTargetForCall('run_code', { code: `import shutil\nshutil.rmtree('${path.join(HOME, '.dsh', 'profiles')}')` }, p)
   assert.equal(d2.action, 'deny')
+  // BARE fs call after `import { rmSync } from 'node:fs'` — no `.` prefix
+  const d4 = destructiveTargetForCall('run_code', { code: `import { rmSync } from 'node:fs'\nrmSync(${JSON.stringify(path.join(HOME, '.dsh', 'profiles'))}, { recursive: true })` }, p)
+  assert.equal(d4.action, 'deny', 'bare rmSync (after import) must be caught')
+  // bare unlinkSync on a protected path
+  const d5 = destructiveTargetForCall('run_code', { code: `import { unlinkSync } from 'node:fs'\nunlinkSync(${JSON.stringify(path.join(HOME, '.dsh', 'profiles', 'settings.yaml'))})` }, p)
+  assert.equal(d5.action, 'deny', 'bare unlinkSync (after import) must be caught')
   // harmless code without destructive verbs passes
   const d3 = destructiveTargetForCall('run_code', { code: `const x = 1; return x + 1` }, p)
   assert.equal(d3.action, 'allow')
+})
+
+test('rm --recursive is recognized as a recursive delete', () => {
+  assert.equal(isRecursiveDelete('bash', { command: 'rm --recursive /tmp/project' }), true)
 })
 
 test('restoreSnapshot is transactional: phase-B failure rolls back cleanly', async () => {

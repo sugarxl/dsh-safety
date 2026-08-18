@@ -8,13 +8,16 @@ guard 在 `ctx.tools.guard()` 层拦截**模型的工具调用**。你在自己�
 
 ## 2. `run_code` 是文本扫描，不是隔离
 
-guard 扫描 `run_code` 代码体，但动态拼接、间接调用、混淆后的删除代码可以绕过。`run_code` 是任意代码执行，**真正隔离它只能靠 DSH 沙箱**。
+guard 扫描 `run_code` 代码体，覆盖主流的直白写法（`fs.rmSync`/`shutil.rmtree`/`require('fs')`、`import { rmSync/unlinkSync } from 'node:fs'` 后的裸调用等）。但：
+- **动态拼接路径 / 运行时构造调用 / import 别名**（`import { rmSync as purge }` 之类）无法靠文本确定，可能绕过；
+- `run_code` 是任意代码执行，**真正隔离它只能靠 DSH 沙箱**。
 
 ## 3. shell 命令是文本匹配，有误报/漏报
 
-- 递归识别靠常见写法（`-Recurse`/`-r`/`-rf`/`/s`/`shutil.rmtree`/`fs.rm recursive`）；冷门等价写法（管道删除 `Get-ChildItem | Remove-Item` 等）可能漏判。
+- 递归识别靠常见写法（`-Recurse`/`-r`/`-rf`/`--recursive`/`/s`/`shutil.rmtree`/`fs.rm recursive` 等）；冷门等价写法（管道删除 `Get-ChildItem | Remove-Item`、`Get-ChildItem ... -Recurse | Remove-Item` 等）可能漏判。
 - 变量引用检测覆盖 `$env:X`/`$X`/`${X}`/`%X%`；通配符、命令注入、跨行拼接可能逃过。
 - 保护标记（`.dsh`、`node_modules`…）可能误伤**恰好提到这些字样的**非破坏性命令——因此只在"命中破坏性动词"后才触发标记检查。
+- 相对路径按**dsh 进程的 cwd** 解析判断，可能与模型会话的工作区根不同——所以相对路径写入 protected 区时可能判不准（绝对路径无此问题）。
 
 ## 4. 不改 DSH 内核，所以治不了"启动即崩"
 
@@ -39,3 +42,8 @@ guard 扫描 `run_code` 代码体，但动态拼接、间接调用、混淆后�
 ## 9. 快照目录请勿公开
 
 `$DSH_HOME/.dsh-safety/` 含日志与（默认已排除凭据后的）快照，仍不建议推上公开仓库。
+
+## 10. 安全中心 web API 的护栏是轻量的
+
+`/safety/api` 的**写操作**（undo/restore/snapshot）要求面板发送的 `X-DSH-Safety: 1` 头——拦得住"碰巧的同源脚本"，但**防不了刻意构造请求的同进程插件**（插件与 dsh 同权）。真正的多租户隔离需 DSH 提供权限模型。
+

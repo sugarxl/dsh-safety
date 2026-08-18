@@ -44,11 +44,12 @@ const HOME = path.resolve(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'
 const args = process.argv.slice(2)
 const flags = { force: false, preview: false, confirm: false, home: HOME }
 const positional = []
-for (const a of args) {
+for (let i = 0; i < args.length; i++) {
+  const a = args[i]
   if (a === '--force') flags.force = true
   else if (a === '--preview') flags.preview = true
   else if (a === '--confirm') flags.confirm = true
-  else if (a === '--home') { const i = args.indexOf(a); flags.home = path.resolve(args[i + 1] ?? HOME); }
+  else if (a === '--home') { flags.home = path.resolve(args[++i] ?? HOME); continue }
   else if (a.startsWith('--exclude=')) flags.exclude = a.slice('--exclude='.length)
   else if (a.startsWith('--limit=')) flags.limit = Number(a.slice('--limit='.length))
   else positional.push(a)
@@ -58,10 +59,6 @@ const [cmd, ...rest] = positional
 
 const out = (s) => { process.stdout.write(s + '\n') }
 const err = (s) => { process.stderr.write('dsh-safety: ' + s + '\n'); process.exit(1) }
-const ok = (o) => {
-  if (o && o.ok === false) err(o.error || 'operation failed')
-  out(o.text)
-}
 
 // Shared with the plugin: policy zones can never drift between CLI and guard.
 const policyForCli = () => buildPolicy(home, {})

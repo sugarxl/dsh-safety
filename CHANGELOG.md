@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Fixed（深度代码审查修复）
+
+- **run_code 裸 fs 调用绕过**（真实绕过）：`import { rmSync/unlinkSync/rmdirSync } from 'node:fs'` 后的**裸调用**（无 `.` 前缀）先前完全漏检，现已识别并拦截（配保护标记/递归判定）。
+- **`rm --recursive` 漏检**：补进递归删除识别。
+- **快照失败残留**：`createSnapshot` 中途失败会清理半成品目录，不再留下无 manifest 的垃圾快照。
+- **还原定位窗口**：`trashRestore` 查找 original 从"最近 5000 条日志"改为读全量，老删除也能精确还原到原路径。
+- **CLI `--home` 参数解析**：修复值被吞进 positional 的问题；删除未使用的 `ok` 死代码。
+- **安全中心 web API 加固**：POST 写操作（undo/restore/snapshot）要求 `X-DSH-Safety: 1` 头；面板请求加 15s 超时。
+- 已知限制补：`run_code` import 别名/动态构造仍可能绕过、相对路径按进程 cwd 解析、web API 护栏是轻量的。
+
 ### Changed（架构加固）
 
 - **策略单一来源**：`buildPolicy` 从插件迁到 `safety-core.mjs`，插件守卫与独立 CLI 共用同一份策略，杜绝两套表面漂移。
