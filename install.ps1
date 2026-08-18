@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $rowId = 'dsh-safety'                 # 组合行 id（不变）
-$pkgName = '@sugarxl/dsh-safety'      # npm 包名（reconcile / remove 用这个）
+$pkgName = '@suagr_xl/dsh-safety'      # npm 包名（reconcile / remove 用这个）
 $dshHome = $env:USERPROFILE + '\.dsh'
 $profileDir = Join-Path (Join-Path $dshHome 'profiles') $Profile
 $profilePkg = Join-Path $profileDir 'package.json'
@@ -74,3 +74,4 @@ catch {
   }
   exit 1
 }
+
