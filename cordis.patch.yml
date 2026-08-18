@@ -8,7 +8,7 @@
 #
 # The package lands in $DSH_HOME/profiles/<name>/node_modules/<pkg>/ and is
 # added to the profile's dsh.profile.bundles by reconcile. The row id must
-# appear in exactly one layer 鈥?never duplicate it in the profile or home
+# appear in exactly one layer —never duplicate it in the profile or home
 # cordis.patch.yml.
 - insert:
     - id: dsh-safety
