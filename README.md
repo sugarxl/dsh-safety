@@ -11,9 +11,7 @@ English | [中文](README.zh.md)
   &nbsp;
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="v0.1.0">
   &nbsp;
-  <!-- Once the repo exists, replace OWNER below (and in package.json) to show a live CI badge:
-       https://img.shields.io/github/actions/workflow/status/OWNER/dsh-safety/test.yml -->
-  <img src="https://img.shields.io/badge/CI-unit%20tests%2019%20%E2%9C%93%2B38%20integration-passing-brightgreen?style=flat-square" alt="CI">
+  <img src="https://img.shields.io/github/actions/workflow/status/sugarxl/dsh-safety/test.yml?style=flat-square&label=CI" alt="CI">
 </p>
 
 <p align="center">
@@ -106,7 +104,7 @@ then active and the `safety_*` tools appear.
 ### From the repository (development)
 
 ```sh
-git clone https://github.com/OWNER/dsh-safety.git   # replace OWNER with your GitHub username
+git clone https://github.com/sugarxl/dsh-safety.git
 cd dsh-safety
 dsh plugin --profile web add link:$(pwd)     # symlink the repo into the profile
 ```
