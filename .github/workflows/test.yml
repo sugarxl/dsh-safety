@@ -2,6 +2,10 @@ name: test
 
 on:
   push:
+    # The self-diagnosis step pushes failure logs to the `ci-logs` branch;
+    # that push must not re-trigger this workflow (infinite loop).
+    branches-ignore:
+      - 'ci-logs'
   pull_request:
 
 jobs:
@@ -17,18 +21,24 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Syntax check
         run: npm run check
-      # Each test file runs as its own step so a platform-specific failure
-      # identifies the failing file immediately (a single `npm test` step
-      # hides which file failed behind one aggregated report).
-      - name: test safety-core
-        run: node --test test/safety.test.mjs
-      - name: test state
-        run: node --test test/state.test.mjs
-      - name: test audit
-        run: node --test test/audit.test.mjs
-      - name: test policy
-        run: node --test test/policy.test.mjs
-      - name: test snapshot-store
-        run: node --test test/snapshot-store.test.mjs
+      - name: Unit tests (capture output)
+        run: |
+          set +e
+          npm test > /tmp/full-test-output.txt 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            cp /tmp/full-test-output.txt "$GITHUB_WORKSPACE/ci-failure.txt"
+            echo "tests failed — full output saved to ci-failure.txt (see next step)"
+            exit $code
+          fi
+      - name: Publish failure log to ci-logs branch
+        if: failure() && hashFiles('ci-failure.txt') != ''
+        run: |
+          git config user.name "dsh-safety-ci"
+          git config user.email "ci@dsh-safety.local"
+          git checkout -b ci-logs
+          git add ci-failure.txt
+          git commit -m "ci: test failure log $(date -u +%Y%m%d-%H%M%S)"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/sugarxl/dsh-safety.git" ci-logs -f
       - name: Integration harness
         run: node test/harness.mjs
