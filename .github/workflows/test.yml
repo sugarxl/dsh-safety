@@ -11,6 +11,8 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         node-version: [22, 24]
@@ -24,8 +26,10 @@ jobs:
       - name: Unit tests (capture output)
         run: |
           set +e
-          npm test > /tmp/full-test-output.txt 2>&1
-          code=$?
+          # tee keeps the full test output visible in this step's log AND in
+          # the file pushed to ci-logs on failure.
+          npm test 2>&1 | tee /tmp/full-test-output.txt
+          code=${PIPESTATUS[0]}
           if [ $code -ne 0 ]; then
             cp /tmp/full-test-output.txt "$GITHUB_WORKSPACE/ci-failure.txt"
             echo "tests failed — full output saved to ci-failure.txt (see next step)"
