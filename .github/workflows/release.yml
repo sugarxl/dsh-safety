@@ -25,9 +25,9 @@ jobs:
         with:
           node-version: 22
       - name: Syntax check
-        run: node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/client.js && node --check bin/dsh-safety.mjs
+        run: npm run check
       - name: Unit tests (zero-dependency)
-        run: node --test test/safety.test.mjs
+        run: npm test
       - name: Integration harness (zero-dependency, clean checkout)
         run: node test/harness.mjs
       - name: Pack tarball
