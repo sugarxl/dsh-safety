@@ -540,6 +540,23 @@ test('scanPatchIds handles quoted ids and trailing inline comments', () => {
   assert.equal(dups[0].id, 'dup')
 })
 
+test('restoreSnapshot refuses to restore a corrupt snapshot (checksum gate)', async () => {
+  const { base, home } = await makeFakeHome()
+  const file = path.join(home, 'profiles', 'web', 'cordis.patch.yml')
+  const snap = await createSnapshot(home, 'integrity')
+  // tamper with the snapshot's copy — the manifest hash no longer matches
+  const snapCopy = path.join(home, '.dsh-safety', 'snapshots', snap.id, 'profiles', 'web', 'cordis.patch.yml')
+  await fsp.writeFile(snapCopy, '- insert:\n    - id: TAMPERED\n')
+  // diverge the live file too, so a restore would otherwise be performed
+  await fsp.writeFile(file, '- insert:\n    - id: BROKEN\n')
+  const res = await restoreSnapshot(home, snap.id)
+  assert.equal(res.ok, false)
+  assert.match(res.error, /checksum mismatch/)
+  // rollback: live file untouched (still the BROKEN version), never half-restored
+  assert.equal(await fsp.readFile(file, 'utf8'), '- insert:\n    - id: BROKEN\n')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
 test('createSnapshot ids are unique even for same-second same-label snapshots', async () => {
   const { base, home } = await makeFakeHome()
   const a = await createSnapshot(home, 'same-label')

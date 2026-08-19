@@ -47,6 +47,14 @@
 - **`scanPatchIds` 行内注释漏扫**：`- id: foo # comment` 因行尾锚点失败整行跳过，跨层重复 id 检测失效。支持引号 id 与行内注释。
 - 测试：新增 6 组回归（符号链接父目录、`del /s`/`erase /s`/`{recursive:1}`、带空格引号路径、行内注释 id、压缩保护已批准授权、写审批非递归归一）。64 单测 + harness 全绿。
 
+### Fixed（深度逻辑/安全审查，第四轮：恢复完整性、瀑布一致性、CLI 与 I/O 边界）
+
+- **损坏快照可能把损坏传播到现行组合（完整性缺口）**：`restoreSnapshot` 相位 B 之前盲拷快照文件，若快照内容被篡改/损坏（hash 对不上），恢复会把坏内容覆写到 profile。现恢复前逐文件**校验 SHA-256**，与 manifest 不符即中止并整体回滚——恢复永远不会把损坏写回。
+- **瀑布层与守卫的符号链接分类不一致（一致性缺口）**：`fs/write-intent`/`fs/edit-intent`/`fs/delete-intent` 用普通 `classify`，守卫已用 `classifyWithReal`——未知名称的写/删工具走瀑布时仍可借符号链接父目录逃逸。瀑布统一改 `classifyWithReal`（最深已存在祖先 realpath）。
+- **CLI 缺值静默回退（误操作风险）**：`--home`/`--path`/`--kind`/`--write-root`/`--confirm-root` 缺值时此前静默用默认值，`dsh-safety --home`（忘带路径）会在错误的 home 上执行。现缺值直接报错退出；`=` 形式（`--path=/x`）始终可用。
+- **`sha256File` 整文件读入内存**：大 lockfile 等全量载入。改为 64KB 分块流式哈希（与 snapshot-store 一致）。
+- 测试：新增 2 组回归（损坏快照校验门、瀑布符号链接父目录），harness 端到端断言 `fs/write-intent` 拦截「经符号链接父目录写受保护区」。65 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）

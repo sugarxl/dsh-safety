@@ -62,25 +62,39 @@ const HOME = path.resolve(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'
 const args = process.argv.slice(2)
 const flags = { force: false, preview: false, confirm: false, home: HOME }
 const positional = []
+
+// A value-taking flag must have an actual value — silently falling back to a
+// default (as `--home` previously did) can make a typo'd invocation operate on
+// the WRONG home directory. The `=` form (`--path=/x`) always works for values
+// that legitimately start with `-`.
+const needValue = (flag, i) => {
+  const v = args[i + 1]
+  if (v === undefined || v.startsWith('--')) {
+    process.stderr.write(`dsh-safety: ${flag} needs a value (e.g. ${flag}=<value>)\n`)
+    process.exit(1)
+  }
+  return v
+}
+
 for (let i = 0; i < args.length; i++) {
   const a = args[i]
   if (a === '--force') flags.force = true
   else if (a === '--preview') flags.preview = true
   else if (a === '--confirm') flags.confirm = true
   else if (a === '--no-home-confirm') flags.noHomeConfirm = true
-  else if (a === '--home') { flags.home = path.resolve(args[++i] ?? HOME); continue }
+  else if (a === '--home') { flags.home = path.resolve(needValue(a, i++)); continue }
   else if (a.startsWith('--exclude=')) flags.exclude = a.slice('--exclude='.length)
   else if (a.startsWith('--limit=')) flags.limit = Number(a.slice('--limit='.length))
   else if (a.startsWith('--keep-trash=')) flags.keepTrash = Number(a.slice('--keep-trash='.length))
   else if (a.startsWith('--keep-snapshots=')) flags.keepSnapshots = Number(a.slice('--keep-snapshots='.length))
-  else if (a === '--kind') { flags.kind = args[++i] ?? 'delete'; continue }
+  else if (a === '--kind') { flags.kind = needValue(a, i++); continue }
   else if (a.startsWith('--kind=')) flags.kind = a.slice('--kind='.length)
   else if (a === '--recursive') flags.recursive = true
-  else if (a === '--path') { flags.path = path.resolve(args[++i] ?? ''); continue }
+  else if (a === '--path') { flags.path = path.resolve(needValue(a, i++)); continue }
   else if (a.startsWith('--path=')) flags.path = path.resolve(a.slice('--path='.length))
-  else if (a === '--write-root') { (flags.writeRoots ||= []).push(path.resolve(args[++i] ?? '')); continue }
+  else if (a === '--write-root') { (flags.writeRoots ||= []).push(path.resolve(needValue(a, i++))); continue }
   else if (a.startsWith('--write-root=')) { (flags.writeRoots ||= []).push(path.resolve(a.slice('--write-root='.length))) }
-  else if (a === '--confirm-root') { (flags.confirmRoots ||= []).push(path.resolve(args[++i] ?? '')); continue }
+  else if (a === '--confirm-root') { (flags.confirmRoots ||= []).push(path.resolve(needValue(a, i++))); continue }
   else if (a.startsWith('--confirm-root=')) { (flags.confirmRoots ||= []).push(path.resolve(a.slice('--confirm-root='.length))) }
   else positional.push(a)
 }

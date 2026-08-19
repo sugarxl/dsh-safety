@@ -7,7 +7,7 @@
  *   node test/harness.mjs
  */
 
-import { promises as fsp, mkdtempSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { promises as fsp, mkdtempSync, writeFileSync, existsSync, mkdirSync, symlinkSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { apply, name, inject } from '../lib/index.js'
@@ -226,6 +226,23 @@ try {
   fsDelApproved = r === 'next'
 } catch { fsDelApproved = false }
 check(fsDelApproved, 'fs/delete-intent allows a user-approved delete (consumes approval)')
+
+// fs waterfall shares the symlink-aware classification: a write through a
+// symlinked PARENT into a protected zone is blocked even for a file that does
+// not exist yet (the deepest-existing-ancestor realpath is classified).
+let protoLink = null
+try {
+  symlinkSync(path.join(web, 'node_modules'), path.join(home, 'proto-link'))
+  protoLink = path.join(home, 'proto-link')
+} catch { protoLink = null }
+if (protoLink) {
+  const fsGuardSym = listeners.get('fs/write-intent')[0]
+  let symBlocked = false
+  try {
+    await fsGuardSym({ displayPath: path.join(protoLink, 'new.txt') }, {}, async () => 'next')
+  } catch (e) { symBlocked = e && e.code === 'FS_DENIED' }
+  check(symBlocked, 'fs/write-intent blocks a write through a symlinked parent into protected')
+}
 
 // safe_delete: refuses confirm-zone paths without force
 const safeDelete = registeredTools.find((t) => t.name === 'safe_delete')
