@@ -21,8 +21,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Syntax check
-        run: npm run check
+      - name: Syntax check (capture output)
+        run: |
+          set +e
+          npm run check 2>&1 | tee /tmp/ci-step.txt
+          code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            cp /tmp/ci-step.txt "$GITHUB_WORKSPACE/ci-failure.txt"
+            echo "syntax check failed — full output saved to ci-failure.txt (see next step)"
+            exit $code
+          fi
       - name: Unit tests (capture output)
         run: |
           set +e
@@ -35,15 +43,6 @@ jobs:
             echo "tests failed — full output saved to ci-failure.txt (see next step)"
             exit $code
           fi
-      - name: Publish failure log to ci-logs branch
-        if: failure() && hashFiles('ci-failure.txt') != ''
-        run: |
-          git config user.name "dsh-safety-ci"
-          git config user.email "ci@dsh-safety.local"
-          git checkout -b ci-logs
-          git add ci-failure.txt
-          git commit -m "ci: test failure log $(date -u +%Y%m%d-%H%M%S)"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/sugarxl/dsh-safety.git" ci-logs -f
       - name: Integration harness (capture output)
         run: |
           set +e
@@ -54,3 +53,15 @@ jobs:
             echo "harness failed — full output saved to ci-failure.txt (see next step)"
             exit $code
           fi
+      - name: Publish failure log to ci-logs branch
+        # MUST be the LAST step: it only runs after every check/test/harness
+        # step has had its chance to write ci-failure.txt (a failure in any of
+        # them is then reported here).
+        if: failure() && hashFiles('ci-failure.txt') != ''
+        run: |
+          git config user.name "dsh-safety-ci"
+          git config user.email "ci@dsh-safety.local"
+          git checkout -b ci-logs
+          git add ci-failure.txt
+          git commit -m "ci: test failure log $(date -u +%Y%m%d-%H%M%S)"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/sugarxl/dsh-safety.git" ci-logs -f

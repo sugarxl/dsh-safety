@@ -84,6 +84,20 @@ test('createApproval stores the system-computed consequence separately from the 
   await fsp.rm(base, { recursive: true, force: true })
 })
 
+test('a recursive approval with a Windows-style literal target covers its subtree on every platform', async () => {
+  const { base, home } = await makeHome()
+  // literal Windows-style target, exactly as the harness/CLI `allow --path`
+  // flow can produce — must cover its subtree even on POSIX (keyOf normalizes
+  // backslashes; previously `\sub` vs `/` made the prefix match fail on Linux)
+  grantApprovalFor(home, { kind: 'delete', target: 'C:\\Temp\\coop-project', recursive: true, grantedBy: 'cli-user' })
+  assert.equal(
+    consumeApproval(home, { kind: 'delete', target: 'C:\\Temp\\coop-project\\sub\\build', recursive: true }),
+    true,
+    'subtree covered with Windows-style literal paths on every platform'
+  )
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
 test('approval writes run under the cross-process lock (lock is cleaned up; stale holder is stolen)', async () => {
   const { base, home } = await makeHome()
   const lockDir = path.join(home, '.dsh-safety', '.approval-lock')

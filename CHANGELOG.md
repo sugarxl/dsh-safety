@@ -2,6 +2,14 @@
 
 本项目使用语义化版本（SemVer）。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.2.1] - 2026-08-19
+
+### Fixed（Linux/macOS 审批匹配跨平台 bug + CI 自诊断盲区）
+
+- **`keyOf` 未归一反斜杠（Linux/macOS 审批子树匹配失效）**：`path.resolve` 在 POSIX 上把 `\` 当字面字符，导致为 `C:\Temp\coop-project` 授予的递归审批在 Linux/macOS 上覆盖不了 `C:\Temp\coop-project\sub\build`——`isUnder` 前缀匹配（`\sub` vs `/`）静默失败。`keyOf` 现把 POSIX 上的反斜杠归一为平台分隔符（Windows 上 no-op），一处修复同时覆盖策略分类（`isUnder`）与审批匹配（`sameTarget`）。补跨平台回归测试。
+- **CI 自诊断盲区（导致上一轮误判）**：test.yml 的「Publish failure log」步骤排在 harness 之前——harness 失败时日志永远不会被推送，`ci-logs 无日志` 只代表单测通过、不代表 harness 通过。现发布步骤移到末尾，且 Syntax check 也纳入失败捕获——任何一步失败都会推送到 `ci-logs` 分支，外部可 `git fetch` 读取。
+- 测试：69 单测 + harness 全绿。
+
 ## [0.2.0] - 2026-08-19
 
 ### 发布概览（0.1.x 未正式发布到 npm，全部并入 0.2.0）
