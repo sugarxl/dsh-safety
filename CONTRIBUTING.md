@@ -14,7 +14,7 @@ node test/harness.mjs           # 集成检查（干净检出、零依赖、无�
 
 ```
 lib/safety-core.mjs       纯逻辑：策略/守卫判定/回收站/快照/校验（零依赖、可单测）
-lib/state.mjs             持久化状态：审批、守卫计数、日志（node 内置，同步读写）
+lib/state.mjs             持久化状态：审批、守卫计数（node 内置，同步读写 + 跨进程原子锁）
 lib/audit.mjs             JSONL 审计 + 阈值告警
 lib/policy.mjs            策略细化工具（符号链接/挂载检测，独立导出）
 lib/snapshot-store.mjs    增量快照工具（独立导出）

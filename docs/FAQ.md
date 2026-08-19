@@ -82,3 +82,7 @@ guard 会**扫描 `run_code` 的代码体文本**（`fs.rmSync`/`shutil.rmtree`/
 ## 之前设置里的「安全中心」面板哪去了？
 
 按用户要求已移除（连同其 `/safety/api` 路由与浏览器半区 `lib/client.js`）。管理/审批/审计全部走模型侧工具与独立 CLI（`safety_ask`、`dsh-safety allow/approvals/revoke`、`safety_journal`/`safety_status`），功能不受影响。
+
+## 模型会不会在 `safety_ask` 里撒谎（把危险操作说成无害）？
+
+会——`what`/`why`/`consequence`/`alternative` 四个字段由模型单方填写，**系统无法核验其真实性**。为此每个审批请求额外携带**系统按真实路径分类计算的后果**（`systemNote`）：`dsh-safety approvals` 把 `[system]` 判定与 `(model: …)` 自述分开显示，批准时以系统判定为准。但这只解决"信息呈现"——如果你不看就批（橡皮图章），任何提示都拦不住；所以请至少在批准前扫一眼 `[system]` 那栏。

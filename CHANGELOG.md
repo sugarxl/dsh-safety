@@ -2,7 +2,16 @@
 
 本项目使用语义化版本（SemVer）。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [0.1.3] - 2026-08-19
+## [0.2.0] - 2026-08-19
+
+### 发布概览（0.1.x 未正式发布到 npm，全部并入 0.2.0）
+
+- **破坏性变更**：`lib/state.mjs` 移除了 18 个未接线的导出（trash/快照/journal/降级/关停元数据，实际由 `safety-core.mjs` 的文件系统存储承担）——`@suagr_xl/dsh-safety/state` 的 API 面收窄为「守卫计数 + 审批」。
+- **信任锚点**：审批请求新增系统计算的权威后果 `systemNote`（真实路径分类得出），CLI 把 `[system]` 判定与模型自述分开呈现——模型因果陈述不再被当作可信输入。
+- **跨进程原子锁**：审批「读→改→写」临界区由 `.approval-lock`（mkdir 原子 + 限时重试 + stamp 陈旧窃取）串行化，web + headless 不再并发丢更新。
+- **完整性与健壮性**：快照恢复校验 fail-closed（缺 checksum 即拒绝）、`recordBlock` 合并落盘、描述缓存、守卫异常可观测、符号链接父目录逃逸封堵、变量引用归一（Linux）、`state.json` 原子写。
+- **文档/工程清理**：死代码、author 乱码、CI 自诊断（失败日志可 `git fetch` 读取）、6 轮审查 CHANGELOG。
+- **测试**：68 单测 + 集成 harness，Windows + Linux CI（Node 22/24）全绿。
 
 ### Fixed（深度逻辑/安全审查，第三轮）
 

@@ -56,7 +56,7 @@ DeepSeek Harness（DSH）的文件系统安全护栏。它在工具执行边界�
   - **`run_code` 代码体同样被扫描**——任意代码执行不能靠"绕过工具边界"把对受保护区的 `fs.rmSync`/`shutil.rmtree` 藏起来。
   - **变量引用删除也能拦**——`Remove-Item "$env:USERPROFILE\.dsh\…"` 这种展开后才是真实路径的命令，会把引用+尾段与保护标记比对并拒绝。
 - **教育式、反绕过的拒绝**——被拦时返回：为什么拦、目标是什么、后果是什么、正路是什么；systemPrompt 明确要求模型"被拦就停、不许换姿势绕过、直接问用户"；同一目标反复被拦会升级为明确的 STOP 警告。
-- **用户审批门禁**——`safety_ask` 发起**带因果的结构化请求**（是什么/为什么/后果/替代方案）；人类通过 `dsh-safety allow <id>`（或 `dsh-safety delete --force`）批准；审批**一次性 + 限时 + 全审计**。模型永远无法自我批准——`force:true` 单独不算数。
+- **用户审批门禁**——`safety_ask` 发起**带因果的结构化请求**（是什么/为什么/后果/替代方案）；人类通过 `dsh-safety allow <id>`（或 `dsh-safety delete --force`）批准；审批**一次性 + 限时 + 全审计 + 跨进程原子锁串行化**（web + headless 不会并发丢更新）。模型永远无法自我批准——`force:true` 单独不算数。每个请求还携带**系统按真实路径分类计算的后果**（`systemNote`），与模型自述分开呈现——你批准时看到的是系统背书的判定，而非模型不可核验的故事。
 - **`safe_delete`** —— 唯一合法的删除通道。删除=移动进回收站（`safety_undo` 可还原）；`preview:true` 先看再删；拒绝文件系统根和自身状态目录；每次删除都进审计日志。
 - **组合快照** —— `safety_snapshot` 把整套插件组合（每个 profile 的 manifest/补丁/lockfile、插件 `package.json`+`cordis.patch.yml`、agent-preset）带 SHA-256 存起来；`safety_restore` 事务化回滚到 last-known-good（现行文件先自动备份，失败的整体回滚不会把组合留成半恢复态）。默认排除含凭据的文件。
 - **重启前体检** —— `safety_check` 检查 UTF-8、**乱码检测**（错误编码往返，就是"DSH 打不开"的经典原因）、JSON 可解析、**跨补丁层重复插件行 id**（"一行只能在一个层"规则）。
@@ -75,7 +75,7 @@ DeepSeek Harness（DSH）的文件系统安全护栏。它在工具执行边界�
         │
         ▼
 模型调用 safety_ask { path, kind, what, why, consequence, alternative }
-        │   → 生成请求、返回 id、写入审计
+        │   → 生成请求（系统同时按真实路径分类计算权威后果）、返回 id、写入审计
         ▼
 模型告诉用户："请批准：dsh-safety allow <id>"
         │
@@ -91,7 +91,7 @@ DeepSeek Harness（DSH）的文件系统安全护栏。它在工具执行边界�
 
 实际细节：
 
-- **请求**：调用被拦时，拒绝消息会提示模型用 `safety_ask` 并附上因果（`what`/`why`/`consequence`/`alternative`），让用户能知情决策。
+- **请求**：调用被拦时，拒绝消息会提示模型用 `safety_ask` 并附上因果（`what`/`why`/`consequence`/`alternative`）。请求同时携带系统计算的 `systemNote`——`dsh-safety approvals` 把 `[system]` 判定与 `(model: …)` 自述分开呈现，让你基于系统分类做知情决策，而非模型的单方陈述。
 - **批准**：`dsh-safety allow <id>` 批准模型创建的请求；`dsh-safety allow --path <p> --kind delete|write [--recursive]` 直接创建并批准一个（你就是人类）；`dsh-safety delete --force` 在 confirm/protected 路径上也会先授予所需审批再移入回收站。
 - **一次性**：审批被第一个匹配调用消费（kind 与 target 精确匹配；递归审批按 flag 精确匹配、target 可为空）。用后即失效。
 - **限时**：已批准的请求在 `approvalTtlMs`（默认 5 分钟）后过期，需重新批准。
@@ -288,7 +288,7 @@ dsh-safety/
 ├── lib/
 │   ├── safety-core.mjs       # 纯逻辑：策略/守卫/回收站/快照/校验
 │   ├── index.js              # host 半区：工具、guard、fs 钩子
-│   ├── state.mjs             # 持久化状态（审批/守卫计数/日志）——已接入 index.js
+│   ├── state.mjs             # 持久化状态（审批/守卫计数）——已接入 index.js
 │   ├── audit.mjs             # JSONL 审计日志 + 阈值告警——已接入 index.js
 │   ├── policy.mjs            # 策略细化工具（符号链接/挂载检测，已导出）
 │   └── snapshot-store.mjs    # 增量快照工具（baseline/delta，已导出）
@@ -313,6 +313,8 @@ npm test                        # 全部单测（核心 + state/audit/policy/sna
 node test/harness.mjs           # 集成检查，干净检出（无需 @deepseek-ai）
 npm run check                   # 每个 lib/bin 模块的语法检查
 ```
+
+当前规模：**68 个单测 + 集成 harness**，Windows 与 Linux CI（Node 22/24）全绿。
 
 ## 故障排查
 

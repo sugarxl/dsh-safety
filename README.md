@@ -90,8 +90,11 @@ layer remains usable even when DSH itself will not start.
 - **User-gated approval system** — `safety_ask` creates a structured request
   (what / why / consequence / alternative); the human approves via
   `dsh-safety allow <id>` (or `dsh-safety delete --force`); the approval is
-  **one-shot, time-limited and audited**. The model can never grant itself one
-  — a `force:true` flag alone is not an approval.
+  **one-shot, time-limited, audited, and serialized across processes by an
+  atomic lock**. The model can never grant itself one — a `force:true` flag
+  alone is not an approval. Every request also carries a **system-computed
+  consequence** (from the real path classification) shown separately from the
+  model's self-report, so the human approves on a system-backed verdict.
 - **`safe_delete`** — the only sanctioned delete channel. Moves to a trash
   directory (recoverable via `safety_undo`), `preview:true` shows what would
   be removed first, refuses filesystem roots and its own state dir, and
@@ -126,7 +129,8 @@ guard BLOCKS it (educational message: what / why / consequence / sanctioned path
         │
         ▼
 agent calls safety_ask { path, kind, what, why, consequence, alternative }
-        │   → creates a request, returns an id, journals it
+        │   → creates a request (the SYSTEM also computes an authoritative
+        │     consequence from the real path classification), returns an id
         ▼
 agent tells the user:  "please approve: dsh-safety allow <id>"
         │
@@ -144,8 +148,10 @@ Practical details:
 
 - **Requesting**: when a call is blocked, the denial message tells the agent
   to call `safety_ask` with the causality. The request carries
-  `what`/`why`/`consequence`/`alternative`, so the user can make an informed
-  decision.
+  `what`/`why`/`consequence`/`alternative` **and** a system-computed
+  `systemNote` — `dsh-safety approvals` shows the `[system]` verdict and the
+  `(model: …)` self-report separately, so you approve on the system's
+  classification, not the model's unverifiable story.
 - **Approving**: `dsh-safety allow <id>` approves an agent-created request.
   `dsh-safety allow --path <p> --kind delete|write [--recursive]` creates and
   approves one directly (you are the human). `dsh-safety delete --force` on a
@@ -401,7 +407,7 @@ dsh-safety/
 ├── lib/
 │   ├── safety-core.mjs       # pure logic: policy/guard/trash/snapshot/check
 │   ├── index.js              # host half: tools, guard, fs hooks
-│   ├── state.mjs             # persisted state (approvals, guard counters, journal) — wired into index.js
+│   ├── state.mjs             # persisted state (approvals, guard counters) — wired into index.js
 │   ├── audit.mjs             # JSONL audit log + threshold alerts — wired into index.js
 │   ├── policy.mjs            # policy refinement utilities (symlink/mount detection, exported)
 │   └── snapshot-store.mjs    # incremental snapshot utilities (baseline/delta, exported)
@@ -426,6 +432,9 @@ npm test                        # all unit tests (core + state/audit/policy/snap
 node test/harness.mjs           # integration checks, clean checkout (no @deepseek-ai needed)
 npm run check                   # syntax checks on every lib/bin module
 ```
+
+Current suite: **68 unit tests + the integration harness**, green on Windows
+and Linux CI (Node 22 and 24).
 
 ## Troubleshooting
 

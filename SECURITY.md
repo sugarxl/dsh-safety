@@ -41,8 +41,14 @@ sandbox an OS user, or protect against:
   to `safe_delete` (trash, undoable); `cooperative` mode lets the human grant
   a one-shot approval for free-path recursive shell deletes.
 - **Approval integrity:** approvals are one-shot, time-limited (default 5
-  minutes), and audited. `force:true` is *not* an approval — only a CLI action
-  by the human is.
+  minutes), audited, and serialized across processes by an atomic lock
+  (`.approval-lock`) so web + headless cannot lose updates on the one-shot
+  consume. `force:true` is *not* an approval — only a CLI action by the human
+  is.
+- **Trust anchor:** every approval request carries a **system-computed
+  consequence** (`systemNote`) derived from the real path classification, shown
+  separately from the model's self-reported narrative — the model's causal
+  story is treated as unverified, not as fact.
 
 ### What the guard does NOT guarantee
 
@@ -52,6 +58,9 @@ sandbox an OS user, or protect against:
 - `safety_check` is a line-level scanner, not a full YAML parser. Treat it as a
   tripwire, not a proof of safety.
 - Approval *records* can be tampered with by a same-process plugin (see above).
+- The approval request's causal narrative (`what`/`why`/`consequence`) is
+  **model-authored and unverified**; the `systemNote` gives the human a
+  system-backed verdict, but a rubber-stamping human remains the final line.
 
 ## Defense-in-depth checklist (recommended configuration)
 
@@ -66,6 +75,10 @@ sandbox an OS user, or protect against:
 5. If the agent ever appears to be "trying other ways" after a block, treat it
    as a possible prompt-injection or misbehavior signal and review the audit
    journal (`safety_journal`).
+6. Approval writes to `state.json` are serialized by the cross-process lock
+   (`.approval-lock`) — don't delete that directory by hand, and prefer keeping
+   `$DSH_HOME/.dsh-safety` on a local filesystem (the lock's stale-steal window
+   assumes local-disk write latencies).
 
 ## Reporting expectations
 

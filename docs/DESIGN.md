@@ -70,10 +70,10 @@ DeepSeek Harness（DSH）把"一切皆插件"推到极致，代价是**缺少护
 
 **原则：模型永远不能批准自己的破坏性调用。** `force:true` 这种模型可自设的标志不是确认——批准只来自人类动作（CLI `dsh-safety allow` / `dsh-safety delete --force`）。
 
-- **请求**（`safety_ask`）：被拦后模型发起结构化请求，携带 `what`/`why`/`consequence`/`alternative`，生成 request id 并写审计。
+- **请求**（`safety_ask`）：被拦后模型发起结构化请求，携带 `what`/`why`/`consequence`/`alternative`，生成 request id 并写审计。**信任锚点**：系统同时按真实路径分类（`classifyWithReal`）计算权威后果写入 `systemNote`——模型自述视为未核验信息，CLI `approvals` 把 `[system]` 判定与 `(model: …)` 自述分开呈现，用户批准时以系统判定为准。
 - **批准**（CLI）：`allow <id>` 批模型请求；`allow --path … [--kind delete|write] [--recursive]` 人类直接创建+批准；`delete --force` 先授予所需审批再移入回收站。
 - **消费**（守卫 / `safe_delete`）：第一个匹配调用（kind 精确、target 精确；递归审批 flag 精确、target 可为空）一次性消费；之后失效。
-- **属性**：一次性 + 限时（`approvalTtlMs`，默认 5 分钟）+ 全审计（谁请求/谁批准/何时/何时消费），持久化于 `state.json`。
+- **属性**：一次性 + 限时（`approvalTtlMs`，默认 5 分钟）+ 全审计（谁请求/谁批准/何时/何时消费），持久化于 `state.json`；审批的「读→改→写」临界区由跨进程原子锁（`.approval-lock`）串行化（限时重试 + stamp 陈旧窃取），web + headless 双进程不会并发丢更新。
 - **防循环**：同一目标反复被拦 → 拒绝消息升级为 STOP，明确禁止换工具/换路径/编码绕过。
 
 ## guard 判定链
