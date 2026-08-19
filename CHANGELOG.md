@@ -73,6 +73,14 @@
 - **author 乱码修正**：package.json `"author"` 由 GBK mojibake `灏忓叞` 更正为 `小兰 (sugarxl)`。
 - 测试：state 测试同步适配（合并落盘、新增「flush 不覆盖审批」回归、锁释放与陈旧窃取测试）。66 单测 + harness 全绿。
 
+### Fixed（信任模型与完整性边界，第六轮）
+
+- **审批的因果陈述信任模型（设计级修复）**：`safety_ask` 的 `what`/`why`/`consequence`/`alternative` 此前全部由模型单方填写、系统零核验——而"模型不可信"恰是本插件立身之本。现审批请求新增 `systemNote` 字段：由 `safety_ask` 用真实路径分类（`classifyWithReal`）调用 `explainConsequence` 计算**系统权威后果**，与模型自述分开存储；CLI `approvals` 列表把 `[system]` 判定与 `(model: …)` 自述分开呈现，用户在批准前看到的是系统背书的事实 + 模型孤证，而非混为一谈。
+- **跨进程锁的误窃窗口（稳健性修复）**：stale 窃取重试窗口由 25ms（5×5ms）扩到 200ms（10×20ms），并新增基于 stamp 的即时窃取——stamp 年龄超过 5s 的崩溃残留立即清理；stamp 新鲜的锁**永不提前窃取**，慢盘/杀软扫描下活锁不再被误判为死锁、互斥不再被破坏。
+- **快照完整性门 fail-closed**：`restoreSnapshot` 此前"manifest 有 sha256 就校验、没有就跳过"——删掉 sha256 字段即可绕过完整性门。现条目缺 checksum 一律拒绝并整体回滚（createSnapshot 始终写 checksum，缺失即篡改/损坏）。
+- **`describeTarget` 目录枚举缓存**：守卫拒绝消息的目录内容预览（前 20 项）按 `路径|mtime|size` 记忆化——同一目标反复被拦（防循环场景）不再每次全量 `readdirSync` 大目录阻塞事件循环；缓存上限 100 条。
+- 测试：新增 3 组（systemNote 分开存储与呈现、缺 checksum 拒绝恢复、harness 端 `safety_ask` 请求携带系统判定）。68 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）

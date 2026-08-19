@@ -66,6 +66,24 @@ test('recordBlock flush never clobbers concurrently-created approvals (race regr
   await fsp.rm(base, { recursive: true, force: true })
 })
 
+test('createApproval stores the system-computed consequence separately from the model narrative', async () => {
+  const { base, home } = await makeHome()
+  const req = createApproval(home, {
+    kind: 'delete',
+    target: '/x',
+    requestedBy: 'agent',
+    what: 'a harmless cache dir',
+    why: 'cleanup',
+    consequence: 'no impact', // model self-report — unverifiable
+    systemNote: 'This is inside a confirm-delete zone: deletes need the USER\'s explicit approval.', // system verdict
+  })
+  const loaded = listApprovals(home).find((r) => r.id === req.id)
+  assert.equal(loaded.systemNote.includes('confirm-delete zone'), true, 'system note is authoritative')
+  assert.equal(loaded.what, 'a harmless cache dir', 'model narrative kept separately, not merged')
+  assert.equal(loaded.consequence, 'no impact', 'model self-report preserved but clearly separable')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
 test('approval writes run under the cross-process lock (lock is cleaned up; stale holder is stolen)', async () => {
   const { base, home } = await makeHome()
   const lockDir = path.join(home, '.dsh-safety', '.approval-lock')

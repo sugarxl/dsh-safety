@@ -195,7 +195,7 @@ REAL user authorizations; the model can never approve its own requests.`)
     const approvals = activeApprovals(home)
     if (approvals.length === 0) { out('no pending or granted approvals'); return }
     out(approvals.map((r) =>
-      `${r.id}\t${r.grantedAt ? 'GRANTED' : 'PENDING'}\t${r.kind}${r.recursive ? '/recursive' : ''}\t${r.target || '(any)'}${r.what ? '\t' + r.what : ''}`
+      `${r.id}\t${r.grantedAt ? 'GRANTED' : 'PENDING'}\t${r.kind}${r.recursive ? '/recursive' : ''}\t${r.target || '(any)'}${r.systemNote ? '\t[system] ' + r.systemNote : ''}${r.what ? '\t(model: ' + r.what + ')' : ''}`
     ).join('\n'))
     return
   }

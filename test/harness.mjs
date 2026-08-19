@@ -11,7 +11,7 @@ import { promises as fsp, mkdtempSync, writeFileSync, existsSync, mkdirSync, sym
 import os from 'node:os'
 import path from 'node:path'
 import { apply, name, inject } from '../lib/index.js'
-import { grantApprovalFor, grantApproval } from '../lib/state.mjs'
+import { grantApprovalFor, grantApproval, activeApprovals } from '../lib/state.mjs'
 
 const base = mkdtempSync(path.join(os.tmpdir(), 'dsh-safety-harness-'))
 const home = path.join(base, 'home')
@@ -127,6 +127,10 @@ writeFileSync(askTarget, 'x\n')
 const ask = await askTool.execute({ path: askTarget, kind: 'delete', what: 'stale plugin file', why: 'cleanup', consequence: 'removed from plugin dir', alternative: 'keep a backup' })
 const askId = /request ([a-z0-9]+) created/.exec(ask.text)
 check(askId !== null, 'safety_ask creates a request with an id')
+// the request must carry a SYSTEM-computed consequence (from the real path
+// classification), not just the model's self-reported narrative
+const askReq = activeApprovals(home).find((r) => r.id === askId[1])
+check(!!askReq && typeof askReq.systemNote === 'string' && askReq.systemNote.includes('confirm-delete zone'), 'approval request carries a system-computed consequence (trust anchor)')
 const pendingDeny = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Force "' + askTarget + '"' }, agent: undefined })
 check(typeof pendingDeny === 'string' && pendingDeny.includes(askId[1]), 'guard reports the pending approval id')
 grantApproval(home, askId[1], { grantedBy: 'cli-user' })

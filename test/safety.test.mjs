@@ -558,6 +558,26 @@ test('scanPatchIds handles quoted ids and trailing inline comments', () => {
   assert.equal(dups[0].id, 'dup')
 })
 
+test('restoreSnapshot refuses a manifest entry with no checksum (fail-closed integrity)', async () => {
+  const { base, home } = await makeFakeHome()
+  const file = path.join(home, 'profiles', 'web', 'cordis.patch.yml')
+  const snap = await createSnapshot(home, 'integrity2')
+  // tamper: strip the sha256 from one manifest entry — restore must refuse
+  const mf = path.join(home, '.dsh-safety', 'snapshots', snap.id, 'manifest.json')
+  const manifest = JSON.parse(await fsp.readFile(mf, 'utf8'))
+  // rel separators are platform-dependent — match by basename
+  const target = manifest.files.find((f) => f.rel.endsWith('cordis.patch.yml'))
+  delete target.sha256
+  await fsp.writeFile(mf, JSON.stringify(manifest, null, 2), 'utf8')
+  // diverge the live file so a restore would otherwise be performed
+  await fsp.writeFile(file, '- insert:\n    - id: BROKEN2\n')
+  const res = await restoreSnapshot(home, snap.id)
+  assert.equal(res.ok, false)
+  assert.match(res.error, /missing its checksum/)
+  assert.equal(await fsp.readFile(file, 'utf8'), '- insert:\n    - id: BROKEN2\n', 'live file untouched')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
 test('restoreSnapshot refuses to restore a corrupt snapshot (checksum gate)', async () => {
   const { base, home } = await makeFakeHome()
   const file = path.join(home, 'profiles', 'web', 'cordis.patch.yml')
