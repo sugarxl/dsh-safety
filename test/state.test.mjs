@@ -161,7 +161,30 @@ test('approvals list is capped so safety_ask spam cannot grow state unbounded', 
   for (let i = 0; i < 600; i++) {
     createApproval(home, { kind: 'delete', target: path.join(home, 'x' + i), requestedBy: 'agent' })
   }
-  assert.equal(listApprovals(home).length, 500, 'only the newest 500 remain')
+  assert.equal(listApprovals(home).length, 200, 'pending requests are capped at 200 (newest kept)')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('compaction never drops a granted-but-unexpired approval', async () => {
+  const { base, home } = await makeHome()
+  // grant one approval first, then flood with 600 pending requests
+  const granted = createApproval(home, { kind: 'delete', target: path.join(home, 'precious'), requestedBy: 'agent' })
+  grantApproval(home, granted.id, { grantedBy: 'user' })
+  for (let i = 0; i < 600; i++) {
+    createApproval(home, { kind: 'delete', target: path.join(home, 'x' + i), requestedBy: 'agent' })
+  }
+  const approvals = listApprovals(home)
+  assert.equal(approvals.some((r) => r.id === granted.id), true, 'the live user grant survives compaction')
+  assert.equal(consumeApproval(home, { kind: 'delete', target: path.join(home, 'precious') }), true, 'the preserved grant still consumes')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('a write approval is always non-recursive (no unconsumable dead records)', async () => {
+  const { base, home } = await makeHome()
+  const req = createApproval(home, { kind: 'write', target: '/x', recursive: true, requestedBy: 'agent' })
+  assert.equal(req.recursive, false, 'write approvals normalize recursive to false')
+  grantApproval(home, req.id, { grantedBy: 'user' })
+  assert.equal(consumeApproval(home, { kind: 'write', target: '/x', recursive: false }), true, 'the write waterfall can consume it')
   await fsp.rm(base, { recursive: true, force: true })
 })
 

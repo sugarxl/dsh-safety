@@ -488,6 +488,58 @@ test('classifyWithReal blocks symlinks that resolve into a protected zone', asyn
   await fsp.rm(base, { recursive: true, force: true })
 })
 
+test('classifyWithReal closes the symlinked-PARENT escape for not-yet-existing files', async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-safety-symparent-'))
+  const protectedDir = path.join(base, 'protected')
+  await fsp.mkdir(protectedDir, { recursive: true })
+  const p = { blockWriteRoots: [protectedDir], confirmDeleteRoots: [] }
+  const link = path.join(base, 'escape-link')
+  try {
+    symlinkSync(protectedDir, link)
+  } catch (e) {
+    await fsp.rm(base, { recursive: true, force: true })
+    return // symlinks unavailable — skip
+  }
+  // The target does NOT exist yet (a file about to be created). The literal
+  // path is free, but its deepest existing ancestor (the link) resolves into
+  // the protected zone, so a write here must be classified protected.
+  const target = path.join(link, 'new-file.txt')
+  assert.equal(existsSync(target), false, 'target does not exist yet')
+  assert.equal(classify(target, p), 'free', 'literal path alone looks free')
+  assert.equal(classifyWithReal(target, p), 'protected', 'symlinked parent resolves into protected')
+  const d = destructiveTargetForCall('write', { file_path: target }, p)
+  assert.equal(d.action, 'deny', 'write through a symlinked parent must be blocked')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('del /s and erase /s are recursive; rmSync accepts {recursive:1} and {recursive:!0}', () => {
+  assert.equal(isRecursiveDelete('pwsh', { command: 'del /s /q "C:\\Temp\\x"' }), true)
+  assert.equal(isRecursiveDelete('pwsh', { command: 'erase /s /q "C:\\Temp\\x"' }), true)
+  assert.equal(isRecursiveDelete('bash', { command: "require('fs').rmSync('C:/x', { recursive: 1 })" }), true)
+  assert.equal(isRecursiveDelete('bash', { command: "rmSync('C:/x', { recursive: !0 })" }), true)
+  assert.equal(isRecursiveDelete('pwsh', { command: 'del /q "C:\\Temp\\x\\file.txt"' }), false, 'plain del stays non-recursive')
+})
+
+test('extractShellPaths captures quoted -Path values that contain spaces', () => {
+  const p = extractShellPaths('Remove-Item -LiteralPath "C:\\Users\\a\\my file.txt" -Force', HOME)
+  assert.ok(p.some((x) => x.toLowerCase().includes('my file.txt')), JSON.stringify(p))
+  const q = extractShellPaths("Remove-Item -Path 'C:/Users/a/my other file.txt'", HOME)
+  assert.ok(q.some((x) => x.toLowerCase().includes('my other file.txt')), JSON.stringify(q))
+})
+
+test('scanPatchIds handles quoted ids and trailing inline comments', () => {
+  const text = '- insert:\n    - id: "quoted-id"\n    - id: plain-id # trailing comment\n    - id: 2nd-quoted # with comment\n'
+  const ids = scanPatchIds(text)
+  assert.deepEqual(ids.map((x) => x.id), ['quoted-id', 'plain-id', '2nd-quoted'])
+  // duplicates across layers are still found when comments are present
+  const dups = findDuplicateIds([
+    { file: 'a.yml', text: '- insert:\n    - id: dup # comment\n' },
+    { file: 'b.yml', text: '- insert:\n    - id: dup\n' },
+  ])
+  assert.equal(dups.length, 1)
+  assert.equal(dups[0].id, 'dup')
+})
+
 test('createSnapshot ids are unique even for same-second same-label snapshots', async () => {
   const { base, home } = await makeFakeHome()
   const a = await createSnapshot(home, 'same-label')

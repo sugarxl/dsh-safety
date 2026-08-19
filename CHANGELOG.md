@@ -34,6 +34,19 @@
 - **审计 CSV 导出未转义**：含逗号/引号的字段会破坏 CSV 行。字段统一加引号转义。
 - 测试：新增 7 组回归（新破坏性动词、正斜杠路径、编辑器 delete、run_code 写、递归目标携带、审批父目录覆盖、审批上限），harness 新增「cooperative 具体目录递归审批」「fs/delete-intent 拦截与放行」端到端断言。58 单测 + harness 全绿。
 
+### Fixed（深度逻辑/安全审查，第三轮：路径解析、持久化与解析器边界）
+
+- **符号链接父目录逃逸（真实洞）**：`classifyWithReal` 只解析目标本身——若目标尚不存在（如 `link/newfile`，`newfile` 待创建）而**父目录**是指向受保护区的符号链接，realpath 抛 ENOENT 后按字面路径（free）放行，写入可直达受保护区。现向上爬取**最深已存在祖先**并解析其 realpath，最严格级别生效。
+- **`state.json` 非原子写（崩溃损坏）**：整文件直接覆写，写一半崩溃会留下截断/损坏的 JSON（审批记录可能静默丢失）。`saveState`/`saveStateSync` 改为 tmp + rename 原子写。
+- **审批压缩会误删已批准的授权**：上一轮「超 500 丢最旧」可能把用户刚批准还没用的授权挤掉。现压缩语义精确：已消费/撤销/过期记录保留最近 250 条历史；pending（未批准）上限 200 条；**已批准未过期的授权永不删除**。
+- **写审批可变成不可消费的死记录**：`safety_ask` 带 `recursive:true` 的写请求永远匹配不上写瀑布（写瀑布按 `recursive:false` 消费）。`createApproval` 对写强制 `recursive:false`。
+- **审计/告警文件无限增长**：`audit.jsonl`/`alerts.json` 永不裁剪。现超 8MB 自动裁剪（审计保留最近 2 万行、告警 1 万行）。
+- **`del /s` / `erase /s` 未判递归**：cmd 递归删文件（含子目录）此前按非递归放行。补入递归识别。
+- **`rmSync(...,{recursive:1})` / `{recursive:!0}` 漏检**：仅 `recursive:true` 被识别。正则扩展到 `true|1|!0`。
+- **`-Path "C:\...\my file.txt"` 带空格引号路径截断**：flag 正则只抓无空格 token，带空格路径被截断后按 free 放行。现捕获完整引号串（双引号/单引号）。
+- **`scanPatchIds` 行内注释漏扫**：`- id: foo # comment` 因行尾锚点失败整行跳过，跨层重复 id 检测失效。支持引号 id 与行内注释。
+- 测试：新增 6 组回归（符号链接父目录、`del /s`/`erase /s`/`{recursive:1}`、带空格引号路径、行内注释 id、压缩保护已批准授权、写审批非递归归一）。64 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）
