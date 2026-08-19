@@ -17,7 +17,18 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Syntax check
         run: npm run check
-      - name: Unit tests (zero-dependency)
-        run: npm test
+      # Each test file runs as its own step so a platform-specific failure
+      # identifies the failing file immediately (a single `npm test` step
+      # hides which file failed behind one aggregated report).
+      - name: test safety-core
+        run: node --test test/safety.test.mjs
+      - name: test state
+        run: node --test test/state.test.mjs
+      - name: test audit
+        run: node --test test/audit.test.mjs
+      - name: test policy
+        run: node --test test/policy.test.mjs
+      - name: test snapshot-store
+        run: node --test test/snapshot-store.test.mjs
       - name: Integration harness
         run: node test/harness.mjs
