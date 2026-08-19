@@ -38,20 +38,24 @@ jobs:
         run: npm pack 2>&1 | tee /tmp/ci-step.txt
       - name: Create GitHub Release
         run: |
-          # Idempotent: create the release, or edit it if it already exists
-          # (a re-triggered tag push must not fail on "release already exists").
-          ls -la *.tgz 2>&1 | tee /tmp/ci-step.txt
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" \
-              --title "dsh-safety ${GITHUB_REF_NAME}" \
-              --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
-              *.tgz
-          else
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "dsh-safety ${GITHUB_REF_NAME}" \
-              --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
-              *.tgz
-          fi
+          # Idempotent: create the release, or edit + upload the tarball if it
+          # already exists (a re-triggered tag push must not fail). The WHOLE
+          # block is teed so any failure is captured into /tmp/ci-step.txt and
+          # pushed to the ci-logs branch by the step below.
+          {
+            ls -la *.tgz
+            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+              gh release edit "${GITHUB_REF_NAME}" \
+                --title "dsh-safety ${GITHUB_REF_NAME}" \
+                --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`."
+              gh release upload "${GITHUB_REF_NAME}" *.tgz --clobber
+            else
+              gh release create "${GITHUB_REF_NAME}" \
+                --title "dsh-safety ${GITHUB_REF_NAME}" \
+                --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
+                *.tgz
+            fi
+          } 2>&1 | tee /tmp/ci-step.txt
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Publish failure log to ci-logs branch
