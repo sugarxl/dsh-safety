@@ -60,6 +60,11 @@
 - **`resolveVariableRefs` 在 POSIX 上不归一反斜杠（Linux CI 失败根因）**：尾段如 `%DSH_HOME%\profiles\web\x.js` 在 Linux 上 `path.join` 后 `profiles\web\x.js` 仍是**一个含字面反斜杠的文件名组件**，`isUnder`/`classify` 前缀匹配失败 → protected 路径被当成 free，误走 `var-ref` 分支（CI 实测 `actual: 'var-ref' expected: 'protected'`）。现尾段反斜杠统一归一为 `path.sep`（Windows 为 no-op）。新增跨平台回归测试。
 - CI 自诊断：`npm test` 失败时完整输出经 `permissions: contents: write` 推送到 `ci-logs` 分支（`branches-ignore` 防循环），外部可直接 `git fetch` 读取失败日志；测试输出同时 `tee` 到步骤日志。66 单测 + harness 全绿。
 
+### Fixed（Linux harness 暴露的 state.json 并发写竞争）
+
+- **审批被并发写覆盖丢（Linux CI 根因）**：守卫拒绝时异步触发 `recordBlock` → `saveState`（先 `await writeFile(tmp)` 再 `await rename`），而审批授予/消费走同步 `saveStateSync`——两者共用同一个 `state.json.tmp`。Linux 上交错时：同步写把共享 tmp rename 走，异步写再 rename 报 **ENOENT**；且异步写提交的是加载时的**旧状态**，会覆盖掉刚批准的审批（harness 实测 `cooperative: a specific-directory recursive approval covers its subtree` 失败）。Windows 调度时序不同未触发。
+- **修复**：所有 state 变更（recordBlock/降级/关停/journal/trash/快照记录 + 审批）统一经 `saveStateSync` **同步原子提交**（load→mutate→save 在一个事件循环切片内不可中断）；`saveState`（异步）仅保留给外部消费者，且临时文件名改为**每写唯一**（pid+时间戳+随机），从根上消除共享 tmp 的 ENOENT。66 单测 + harness 全绿（Windows 本地验证）。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）
