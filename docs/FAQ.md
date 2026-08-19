@@ -8,17 +8,43 @@
 
 部分重复，但不完全。DSH 自带 `dsh-sandbox-policy`（工作区外要审批）+ `dsh-user-approval`（确认门）——**在配置正确的前提下，那才是第一道、也是更强的一道防线**。但现实里沙箱常常是宽开的（曾实测：一条 `Remove-Item -Recurse -Force` 没有任何内置机制拦住）。本插件补的是：
 - dsh 没有的**恢复层**：回收站/undo、组合快照/回滚、删除审计、重启前体检；
+- **问人层**：重要的删改必须先经过用户审批（`safety_ask` → `dsh-safety allow`）；
 - 宽开沙箱下的**兜底拦截**。
 
-最佳实践：**先把 DSH 沙箱/审批配好，再用本插件做恢复层**。
+最佳实践：**先把 DSH 沙箱/审批配好，再用本插件做恢复层与问人层**。
+
+## 模型想删除/改写重要文件时，正确流程是什么？
+
+1. 模型调用被守卫**拦截**，收到教育式拒绝（是什么/为什么/后果/正路）；
+2. 模型调用 **`safety_ask`**，附上因果（what / why / consequence / alternative），得到 request id；
+3. 模型把 id 告诉**你**；
+4. 你执行 **`dsh-safety allow <id>`**（或直接 `dsh-safety delete <path> --force`）；
+5. 模型重试原调用 → 守卫放行一次（该审批即被消费）。
+
+## 为什么 `force:true` 不够了？
+
+因为模型能自己传 `force:true`——**模型可自设的标志不是用户确认**，那等于没有确认门。所以现在 `safe_delete` 的 `force:true` 只是标记，删除 confirm/protected 目标前必须存在**已由用户批准**的审批请求。CLI 侧的 `dsh-safety delete --force` 是例外：CLI 用户就是人类本人，`--force` 即真实审批。
 
 ## 如何删除受保护路径上的文件？
 
-用 `safe_delete`（或 CLI `dsh-safety delete`）加 `force:true`/`--force`。该操作仍只进回收站、永不真正删除，可随时 `undo`。
+**CLI 侧**（你是人类）：
+```bash
+dsh-safety delete <path> --force    # 先授予所需审批，再移入回收站（可撤销）
+```
+**模型侧**：让模型先 `safety_ask` 创建请求，你再 `dsh-safety allow <id>`。无论哪种方式，删除**只进回收站、永不真正删除**，可随时 `undo`。
 
-## 为什么递归删除在任何路径都无条件拒绝？
+## 模型被拦之后一直"换别的办法"重试，怎么办？
 
-目录递归删除（`rm -rf`、`Remove-Item -Recurse`）的破坏半径最大、意图最难判断，且正是那次真实事故的直接手法。策略为默认拒绝、显式放行——需要删除时走 `safe_delete` 进回收站（可撤销）。
+这正是守卫要阻止的行为：systemPrompt 已明确"被拦就停、不许换工具/换路径/编码绕过"，且同一目标反复被拦会升级为 STOP 警告。如果模型仍在纠缠，直接回复它：**调用 `safety_ask` 说明因果并等待批准，或放弃该操作**。
+
+## 为什么递归删除默认在任何路径都无条件拒绝？
+
+目录递归删除（`rm -rf`、`Remove-Item -Recurse`）的破坏半径最大、意图最难判断，且正是那次真实事故的直接手法。策略为默认拒绝、显式放行——需要删除时走 `safe_delete` 进回收站（可撤销）。`mode: cooperative` 下人类可授予一次性通用递归审批放行自由路径的递归删除（`dsh-safety allow --path … --recursive`）。
+
+## `strict` 和 `cooperative` 有什么区别？
+
+- `strict`（默认）：递归 shell 删除**永不可批准**，目录树删除唯一通道是 `safe_delete`（回收站、可撤销）——最安全；
+- `cooperative`：人类可授予一次性审批放行自由路径的递归 shell 删除——更灵活，但**删除是永久的、不进回收站**，只在你明确信任该操作时使用。
 
 ## DSH 打不开了，我还能用这个吗？
 
@@ -52,3 +78,7 @@ guard 会**扫描 `run_code` 的代码体文本**（`fs.rmSync`/`shutil.rmtree`/
 ## 快照里会不会存到我的密钥？
 
 不会。`settings.yaml`、`.credentials.yaml` 默认被排除（`snapshotExclude` 可配置）。但请勿把 `$DSH_HOME/.dsh-safety/` 目录本身推上任何公开仓库。
+
+## 之前设置里的「安全中心」面板哪去了？
+
+按用户要求已移除（连同其 `/safety/api` 路由与浏览器半区 `lib/client.js`）。管理/审批/审计全部走模型侧工具与独立 CLI（`safety_ask`、`dsh-safety allow/approvals/revoke`、`safety_journal`/`safety_status`），功能不受影响。

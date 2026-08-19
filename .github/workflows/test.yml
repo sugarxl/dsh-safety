@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Syntax check
-        run: node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/client.js
+        run: npm run check
       - name: Unit tests (zero-dependency)
-        run: node --test test/safety.test.mjs
+        run: npm test
+      - name: Integration harness
+        run: node test/harness.mjs

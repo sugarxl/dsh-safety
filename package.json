@@ -1,6 +1,6 @@
 {
   "name": "@suagr_xl/dsh-safety",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": "灏忓叞 (sugarxl)",
   "description": "A safety harness plugin for DeepSeek Harness (DSH): protected-path enforcement, trash-based safe_delete with undo, last-known-good composition snapshots, pre-restart composition checks, and an audit journal.",
   "type": "module",
@@ -12,8 +12,17 @@
     ".": {
       "default": "./lib/index.js"
     },
-    "./client": {
-      "default": "./lib/client.js"
+    "./state": {
+      "default": "./lib/state.mjs"
+    },
+    "./audit": {
+      "default": "./lib/audit.mjs"
+    },
+    "./policy": {
+      "default": "./lib/policy.mjs"
+    },
+    "./snapshot-store": {
+      "default": "./lib/snapshot-store.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -30,9 +39,9 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "test": "node --test test/safety.test.mjs",
+    "test": "node --test --test-concurrency=2 test/safety.test.mjs test/state.test.mjs test/audit.test.mjs test/policy.test.mjs test/snapshot-store.test.mjs",
     "test:harness": "node test/harness.mjs",
-    "check": "node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/client.js && node --check bin/dsh-safety.mjs",
+    "check": "node --check lib/index.js && node --check lib/safety-core.mjs && node --check lib/state.mjs && node --check lib/audit.mjs && node --check lib/policy.mjs && node --check lib/snapshot-store.mjs && node --check bin/dsh-safety.mjs",
     "prepublishOnly": "npm run check && npm test",
     "pack": "npm pack --dry-run"
   },
@@ -53,14 +62,6 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-conversation"
-      ],
-      "platform": "web"
     }
   },
   "license": "MIT",

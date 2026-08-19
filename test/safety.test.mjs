@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { promises as fsp, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { promises as fsp, existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
   buildPolicy,
   classify,
+  classifyWithReal,
   destructiveTargetForCall,
   extractVariableRefFragments,
   isDriveRoot,
@@ -241,6 +242,58 @@ test('trash move/restore roundtrip', async () => {
   await fsp.rm(base, { recursive: true, force: true })
 })
 
+test('trashRestore rejects path-traversal ids (safety_undo cannot touch files outside trash)', async () => {
+  const { base, home } = await makeFakeHome()
+  await ensureStateDirs(home)
+  // An id like `../../escape-file.txt` would resolve OUTSIDE the trash dir if
+  // it were blindly path.join'ed — it must be rejected outright.
+  const marker = path.join(path.dirname(home), 'escape-file.txt')
+  writeFileSync(marker, 'DO NOT TOUCH')
+  const r = await trashRestore(home, '../../escape-file.txt')
+  assert.equal(r.ok, false)
+  assert.equal(r.error, 'invalid-id')
+  assert.equal(existsSync(marker), true, 'file outside the trash dir is untouched')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('restoreSnapshot rejects path-traversal ids', async () => {
+  const { base, home } = await makeFakeHome()
+  await ensureStateDirs(home)
+  const r = await restoreSnapshot(home, '../../escape')
+  assert.equal(r.ok, false)
+  assert.equal(r.error, 'invalid-id')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('run_code bodies with explicit protected/confirm absolute paths are denied (parity with shell)', () => {
+  const protectedAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')
+  const confirmAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'plugins', 'p1', 'lib', 'index.js')
+  const p = { home: HOME, blockWriteRoots: [path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')], confirmDeleteRoots: [path.join(HOME, '.dsh', 'profiles', 'web', 'plugins')] }
+  // non-recursive unlink on a protected path, NO marker substring, NO recursion
+  const d1 = destructiveTargetForCall('run_code', { code: `require('fs').unlinkSync(${JSON.stringify(protectedAbs)})` }, p)
+  assert.equal(d1.action, 'deny')
+  assert.equal(d1.cls, 'protected')
+  // non-recursive unlink on a confirm-zone path (plugin source)
+  const d2 = destructiveTargetForCall('run_code', { code: `import { unlinkSync } from 'node:fs'\nunlinkSync(${JSON.stringify(confirmAbs)})` }, p)
+  assert.equal(d2.action, 'deny')
+  assert.equal(d2.cls, 'confirm')
+})
+
+test('variable refs that resolve into the DSH home are denied even without a protected marker', () => {
+  // A custom DSH_HOME whose name contains no protected marker substring
+  // (no ".dsh", no "node_modules", no "package.json" in the path text).
+  const customHome = path.join(HOME, 'custom-dsh-home')
+  const p = { home: customHome, blockWriteRoots: [path.join(customHome, 'profiles')], confirmDeleteRoots: [] }
+  // `$env:DSH_HOME\scratch.txt` — no marker in the fragment, only resolvable
+  const d = destructiveTargetForCall('pwsh', { command: `Remove-Item -Force "$env:DSH_HOME\\scratch.txt"` }, p)
+  assert.equal(d.action, 'deny')
+  assert.equal(d.cls, 'var-ref')
+  // and a percent-style reference into a protected profile path
+  const d2 = destructiveTargetForCall('pwsh', { command: `Remove-Item -Force "%DSH_HOME%\\profiles\\web\\plugins\\p1\\lib\\x.js"` }, p)
+  assert.equal(d2.action, 'deny')
+  assert.equal(d2.cls, 'protected')
+})
+
 test('snapshot create/list/restore roundtrip', async () => {
   const { base, home } = await makeFakeHome()
   const file = path.join(home, 'profiles', 'web', 'cordis.patch.yml')
@@ -325,5 +378,87 @@ test('restoreSnapshot is transactional: phase-B failure rolls back cleanly', asy
   // rollback: the earlier restored files are back to their pre-restore live state
   assert.equal(await fsp.readFile(file, 'utf8'), '- insert:\n    - id: CORRUPTED\n')
   assert.equal(await fsp.readFile(pkg, 'utf8'), pkgBefore)
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('isDriveRoot recognizes the OS filesystem root (including POSIX /)', () => {
+  const root = process.platform === 'win32' ? 'C:\\' : '/'
+  assert.equal(isDriveRoot(root), true)
+  assert.equal(isDriveRoot(path.join(HOME, 'x')), false)
+})
+
+test('str_replace_editor writes are blocked on protected paths via the `path` argument', () => {
+  const protectedAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')
+  const p = { blockWriteRoots: [path.join(HOME, '.dsh')], confirmDeleteRoots: [] }
+  // the real editor tool passes { path, command }, not { file_path }
+  const hit = destructiveTargetForCall('str_replace_editor', { path: protectedAbs, command: 'str_replace', old_string: 'a', new_string: 'b' }, p)
+  assert.equal(hit.action, 'deny')
+  assert.equal(hit.kind, 'write')
+  // view is a read — must stay allowed
+  const view = destructiveTargetForCall('str_replace_editor', { path: protectedAbs, command: 'view' }, p)
+  assert.equal(view.action, 'allow')
+  // create on a free path stays allowed
+  const createFree = destructiveTargetForCall('str_replace_editor', { path: path.join(HOME, 'tmp-free.js'), command: 'create', file_text: 'x' }, p)
+  assert.equal(createFree.action, 'allow')
+})
+
+test('classifyWithReal blocks symlinks that resolve into a protected zone', async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-safety-sym-'))
+  const protectedDir = path.join(base, 'protected')
+  await fsp.mkdir(protectedDir, { recursive: true })
+  const p = { blockWriteRoots: [protectedDir], confirmDeleteRoots: [] }
+  // literal path is outside the protected zone, but the symlink points into it
+  const link = path.join(base, 'escape-link')
+  try {
+    symlinkSync(protectedDir, link)
+  } catch (e) {
+    await fsp.rm(base, { recursive: true, force: true })
+    return // symlinks unavailable on this host (e.g. no privilege) — skip
+  }
+  const target = path.join(link, 'package.json')
+  assert.equal(classify(target, p), 'free', 'literal path alone looks free')
+  assert.equal(classifyWithReal(target, p), 'protected', 'realpath resolves into the protected zone')
+  const d = destructiveTargetForCall('write', { file_path: target }, p)
+  assert.equal(d.action, 'deny', 'write through the symlink must be blocked')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('createSnapshot ids are unique even for same-second same-label snapshots', async () => {
+  const { base, home } = await makeFakeHome()
+  const a = await createSnapshot(home, 'same-label')
+  const b = await createSnapshot(home, 'same-label')
+  assert.notEqual(a.id, b.id, 'two snapshots in the same second must not collide')
+  assert.equal((await snapshotList(home)).length, 2)
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('createSnapshot works on an empty home (no composition files yet)', async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-safety-empty-'))
+  const home = path.join(base, 'home')
+  await fsp.mkdir(home, { recursive: true })
+  const snap = await createSnapshot(home, 'empty')
+  assert.equal(snap.files.length, 0)
+  assert.ok(existsSync(path.join(home, '.dsh-safety', 'snapshots', snap.id, 'manifest.json')))
+  assert.equal((await snapshotList(home)).length, 1)
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('restoreSnapshot refuses a manifest that escapes the home dir', async () => {
+  const { base, home } = await makeFakeHome()
+  await ensureStateDirs(home)
+  const evilId = '00000000-000000-evil'
+  const evilDir = path.join(home, '.dsh-safety', 'snapshots', evilId)
+  await fsp.mkdir(evilDir, { recursive: true })
+  await fsp.writeFile(
+    path.join(evilDir, 'manifest.json'),
+    JSON.stringify({ id: evilId, at: new Date().toISOString(), label: 'evil', files: [{ rel: '../escape-target.txt' }] }),
+    'utf8'
+  )
+  const marker = path.join(home, '..', 'escape-target.txt')
+  writeFileSync(marker, 'DO NOT TOUCH')
+  const res = await restoreSnapshot(home, evilId)
+  assert.equal(res.ok, false)
+  assert.match(res.error, /unsafe manifest entry/)
+  assert.equal(await fsp.readFile(marker, 'utf8'), 'DO NOT TOUCH', 'nothing outside home was touched')
   await fsp.rm(base, { recursive: true, force: true })
 })

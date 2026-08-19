@@ -12,7 +12,7 @@
  * 因此即使 DSH 无法启动或插件未安装，也能执行 undo/restore/check。零第三方依赖。
  *
  * Usage:
- *   dsh-safety status                 show state: zones, trash, snapshots, journal
+ *   dsh-safety status                 show state: zones, trash, snapshots, approvals, journal
  *   dsh-safety delete <path> [--force] [--preview]
  *   dsh-safety trash [--limit N]
  *   dsh-safety undo <id>
@@ -21,9 +21,20 @@
  *   dsh-safety check                  pre-restart composition validation
  *   dsh-safety journal [n]
  *   dsh-safety policy                 print the effective policy zones
+ *   dsh-safety approvals              list pending/granted approval requests
+ *   dsh-safety allow <id>             approve a request the agent created
+ *   dsh-safety allow --path <p> [--kind delete|write] [--recursive]   approve a new one directly
+ *   dsh-safety revoke <id>            revoke a request
  *   dsh-safety help
  *
  * Home resolution: $DSH_HOME, else ~/.dsh. Override with --home <path>.
+ *
+ * Policy overrides (align the CLI with the plugin's configured roots, which a
+ * standalone CLI cannot read from the cordis patch layers):
+ *   --write-root <path>      add a protected (no write/edit/delete) root
+ *   --confirm-root <path>    add a confirm-delete (trash-only) root
+ *   --no-home-confirm        do NOT make the whole OS home a confirm zone
+ *   --keep-trash=N / --keep-snapshots=N   retention caps after delete/snapshot
  */
 
 import os from 'node:os'
@@ -34,6 +45,7 @@ import {
   classify,
   createSnapshot,
   ensureStateDirs,
+  isDriveRoot,
   journalTail,
   prune,
   restoreSnapshot,
@@ -43,6 +55,7 @@ import {
   trashRestore,
   validateComposition,
 } from '../lib/safety-core.mjs'
+import { grantApproval, grantApprovalFor, revokeApproval, listApprovals, activeApprovals } from '../lib/state.mjs'
 
 const HOME = path.resolve(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'))
 
@@ -54,9 +67,21 @@ for (let i = 0; i < args.length; i++) {
   if (a === '--force') flags.force = true
   else if (a === '--preview') flags.preview = true
   else if (a === '--confirm') flags.confirm = true
+  else if (a === '--no-home-confirm') flags.noHomeConfirm = true
   else if (a === '--home') { flags.home = path.resolve(args[++i] ?? HOME); continue }
   else if (a.startsWith('--exclude=')) flags.exclude = a.slice('--exclude='.length)
   else if (a.startsWith('--limit=')) flags.limit = Number(a.slice('--limit='.length))
+  else if (a.startsWith('--keep-trash=')) flags.keepTrash = Number(a.slice('--keep-trash='.length))
+  else if (a.startsWith('--keep-snapshots=')) flags.keepSnapshots = Number(a.slice('--keep-snapshots='.length))
+  else if (a === '--kind') { flags.kind = args[++i] ?? 'delete'; continue }
+  else if (a.startsWith('--kind=')) flags.kind = a.slice('--kind='.length)
+  else if (a === '--recursive') flags.recursive = true
+  else if (a === '--path') { flags.path = path.resolve(args[++i] ?? ''); continue }
+  else if (a.startsWith('--path=')) flags.path = path.resolve(a.slice('--path='.length))
+  else if (a === '--write-root') { (flags.writeRoots ||= []).push(path.resolve(args[++i] ?? '')); continue }
+  else if (a.startsWith('--write-root=')) { (flags.writeRoots ||= []).push(path.resolve(a.slice('--write-root='.length))) }
+  else if (a === '--confirm-root') { (flags.confirmRoots ||= []).push(path.resolve(args[++i] ?? '')); continue }
+  else if (a.startsWith('--confirm-root=')) { (flags.confirmRoots ||= []).push(path.resolve(a.slice('--confirm-root='.length))) }
   else positional.push(a)
 }
 const home = flags.home
@@ -66,7 +91,14 @@ const out = (s) => { process.stdout.write(s + '\n') }
 const err = (s) => { process.stderr.write('dsh-safety: ' + s + '\n'); process.exit(1) }
 
 // Shared with the plugin: policy zones can never drift between CLI and guard.
-const policyForCli = () => buildPolicy(home, {})
+// The plugin's configured roots live in the cordis patch layers, which this
+// standalone CLI cannot read — so it accepts the same overrides via flags so a
+// user can align the CLI's classification with the running guard's policy.
+const policyForCli = () => buildPolicy(home, {
+  homeIsConfirm: !flags.noHomeConfirm,
+  blockWriteRoots: flags.writeRoots || [],
+  confirmDeleteRoots: flags.confirmRoots || [],
+})
 
 async function main() {
   await ensureStateDirs(home).catch(() => {})
@@ -75,12 +107,43 @@ async function main() {
     const trash = await trashList(home)
     const snaps = await snapshotList(home)
     const tail = await journalTail(home, 5)
+    const approvals = activeApprovals(home)
+    const pending = approvals.filter((r) => !r.grantedAt)
     out([
       `home=${home}`,
       `trash=${trash.length} item(s)`,
       `snapshots=${snaps.length}: ${snaps.map((s) => s.id).join(', ') || '(none)'}`,
+      `approvals: ${pending.length} pending — ${pending.map((r) => `${r.id}(${r.kind}${r.recursive ? ',recursive' : ''}${r.target ? ' ' + r.target : ''})`).join(', ') || '(none)'}`,
       `journal: ${tail.map((e) => e.kind).join(', ') || '(empty)'}`,
     ].join('\n'))
+    return
+  }
+
+  if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
+    out(`dsh-safety — filesystem safety harness for DeepSeek Harness (standalone CLI, zero deps)
+
+Usage:
+  dsh-safety status                 show state: zones, trash, snapshots, approvals, journal
+  dsh-safety delete <path> [--force] [--preview]
+  dsh-safety trash [--limit N]
+  dsh-safety undo <id>
+  dsh-safety snapshot [label] [--exclude a,b]
+  dsh-safety restore <id> --confirm
+  dsh-safety check                  pre-restart composition validation (exit 1 on failure)
+  dsh-safety journal [n]
+  dsh-safety policy                 print the effective policy zones
+  dsh-safety approvals              list pending/granted approval requests
+  dsh-safety allow <id>             approve a request the agent created
+  dsh-safety allow --path <p> [--kind delete|write] [--recursive]   approve a new one directly
+  dsh-safety revoke <id>            revoke a request
+  dsh-safety help
+
+Global:        --home <path>   (default $DSH_HOME or ~/.dsh)
+Policy:        --write-root <path> --confirm-root <path> --no-home-confirm
+Retention:     --keep-trash=N --keep-snapshots=N
+
+The CLI is the human side of the approval flow: delete --force and allow are
+REAL user authorizations; the model can never approve its own requests.`)
     return
   }
 
@@ -90,7 +153,7 @@ async function main() {
     const abs = path.resolve(target)
     const policy = policyForCli()
     const cls = classify(abs, policy)
-    if (abs === home || abs === path.dirname(home)) err(`refusing to delete a root: ${abs}`)
+    if (abs === home || abs === path.dirname(home) || isDriveRoot(abs)) err(`refusing to delete a filesystem root: ${abs}`)
     if (path.resolve(abs).toLowerCase().startsWith(path.join(home, '.dsh-safety').toLowerCase())) err(`refusing to delete dsh-safety state: ${abs}`)
     if (!existsSync(abs)) err(`not found: ${abs}`)
     if (flags.preview) {
@@ -105,9 +168,47 @@ async function main() {
       return
     }
     if (cls !== 'free' && !flags.force) err(`"${abs}" is ${cls} — pass --force to move it to trash (still undoable)`)
+    // The CLI user IS the human: --force authorizes the move. It always goes to
+    // trash directly, so no approval record is granted here (a granted-but-
+    // never-consumed approval would just linger in state until it expires).
     const r = await trashMove(home, abs, policy, { op: 'cli-delete', by: 'user' })
-    prune(home, 200, 10).catch(() => {})
+    prune(home, flags.keepTrash || 200, flags.keepSnapshots || 10).catch(() => {})
     out(`moved to trash: ${abs}\ntrash id: ${r.id}\nundo with: dsh-safety undo ${r.id}`)
+    return
+  }
+
+  if (cmd === 'approvals') {
+    const approvals = activeApprovals(home)
+    if (approvals.length === 0) { out('no pending or granted approvals'); return }
+    out(approvals.map((r) =>
+      `${r.id}\t${r.grantedAt ? 'GRANTED' : 'PENDING'}\t${r.kind}${r.recursive ? '/recursive' : ''}\t${r.target || '(any)'}${r.what ? '\t' + r.what : ''}`
+    ).join('\n'))
+    return
+  }
+
+  if (cmd === 'allow') {
+    // `allow <id>` approves a request the agent created; `allow --path <p>`
+    // creates+grants one directly (the CLI user is the human).
+    const id = rest[0]
+    if (id) {
+      const r = grantApproval(home, id, { grantedBy: 'cli-user' })
+      if (!r.ok) err(r.reason || 'approval not found')
+      out(`approved ${id} (${r.request.kind} on ${r.request.target || 'any'}, expires ${new Date(r.request.expiresAt).toISOString()})`)
+      return
+    }
+    const target = rest[0] || (flags.path ? path.resolve(flags.path) : null)
+    if (!target) err('allow needs a request id, or --path <path> [--kind delete|write] [--recursive]')
+    const req = grantApprovalFor(home, { kind: flags.kind === 'write' ? 'write' : 'delete', target, recursive: flags.recursive === true, grantedBy: 'cli-user' })
+    out(`created + approved ${req.request.id} (${req.request.kind}${req.request.recursive ? ',recursive' : ''} on ${target})`)
+    return
+  }
+
+  if (cmd === 'revoke') {
+    const id = rest[0]
+    if (!id) err('revoke needs an approval id (see: dsh-safety approvals)')
+    const r = revokeApproval(home, id)
+    if (!r.ok) err(r.reason || 'approval not found')
+    out(`revoked ${id}`)
     return
   }
 
@@ -174,7 +275,7 @@ async function main() {
     return
   }
 
-  err(`unknown command "${cmd}" — try: status | delete | trash | undo | snapshot | restore | check | journal | policy | help`)
+  err(`unknown command "${cmd}" — try: status | delete | trash | undo | snapshot | restore | check | journal | policy | approvals | allow | revoke | help`)
 }
 
 main().catch((e) => err(e && e.message ? e.message : String(e)))

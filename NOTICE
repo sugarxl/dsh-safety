@@ -8,8 +8,8 @@ architecture, which is released under the MIT License:
   DeepSeek Harness — https://github.com/deepseek-ai/deepseek-harness
   Copyright (c) DeepSeek AI
 
-The browser-side "settings.section" slot pattern (lib/client.js) follows the
-reference plugin pattern used by the DeepSeek Harness personal-plugin
-ecosystem.
+The plugin follows the DSH host-side plugin pattern (`ctx.tools.guard`,
+`ctx.systemPrompt.section`, `ctx.on`) used by the DeepSeek Harness
+personal-plugin ecosystem.
 
 The dsh-safety code itself is licensed under the MIT License (see LICENSE).

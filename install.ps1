@@ -1,4 +1,4 @@
-﻿<#
+<#
 # dsh-safety install.ps1 — 官方安装方式的"安全包装"：备份 → dsh plugin add → 校验 → 失败自动回滚
 #
 # 安装走官方机制（与 README 一致）：
@@ -21,7 +21,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $rowId = 'dsh-safety'                 # 组合行 id（不变）
 $pkgName = '@suagr_xl/dsh-safety'      # npm 包名（reconcile / remove 用这个）
-$dshHome = $env:USERPROFILE + '\.dsh'
+$dshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { $env:USERPROFILE + '\.dsh' }
 $profileDir = Join-Path (Join-Path $dshHome 'profiles') $Profile
 $profilePkg = Join-Path $profileDir 'package.json'
 $backupRoot = Join-Path $dshHome ".dsh-safety\install-backups\$([DateTime]::Now.ToString('yyyyMMdd-HHmmss'))"
@@ -33,7 +33,7 @@ Write-Host "===== dsh-safety 安装计划（官方机制）====="
 Write-Host "源:        $absSource"
 Write-Host "profile:   $Profile  ($profileDir)"
 Write-Host "命令:      dsh plugin --profile $Profile add link:$absSource"
-Write-Host "安装位置:  $profileDir\node_modules\@sugarxl\dsh-safety\（scoped 包）"
+Write-Host "安装位置:  $profileDir\node_modules\@suagr_xl\dsh-safety\（scoped 包）"
 Write-Host "组合层:    $profilePkg  (dsh.profile.bundles 自动 reconcile -> $pkgName)"
 Write-Host "备份:      $backupRoot"
 Write-Host "校验:      dsh --profile $Profile --dump-config | findstr $rowId"

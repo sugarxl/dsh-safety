@@ -11,6 +11,7 @@ import { promises as fsp, mkdtempSync, writeFileSync, existsSync, mkdirSync } fr
 import os from 'node:os'
 import path from 'node:path'
 import { apply, name, inject } from '../lib/index.js'
+import { grantApprovalFor, grantApproval } from '../lib/state.mjs'
 
 const base = mkdtempSync(path.join(os.tmpdir(), 'dsh-safety-harness-'))
 const home = path.join(base, 'home')
@@ -27,7 +28,6 @@ const registeredTools = []
 const guards = []
 const sections = []
 const listeners = new Map()
-const webRoutes = []
 const effects = []
 
 const ctx = {
@@ -47,9 +47,6 @@ const ctx = {
     if (!listeners.has(evt)) listeners.set(evt, [])
     listeners.get(evt).push(fn)
     return () => {}
-  },
-  webServer: {
-    register(r) { webRoutes.push(r); return () => {} },
   },
   get() { return undefined },
   logger: { warn: () => {} },
@@ -71,13 +68,12 @@ const check = (cond, msg) => {
 }
 
 check(name === 'dsh-safety', 'plugin name')
-check(Array.isArray(inject) && inject.includes('tools'), 'inject declares tools')
+check(Array.isArray(inject) && inject.includes('tools') && !inject.includes('webServer'), 'inject declares tools only (no web panel)')
 check(sections.some((s) => s.name === 'safety:policy'), 'policy section registered')
-check(webRoutes.some((r) => r.path === '/safety/api'), '/safety/api route registered')
 check(listeners.has('fs/write-intent') && listeners.has('fs/edit-intent'), 'fs waterfall listeners registered')
 
 const toolNames = registeredTools.map((t) => t.name)
-for (const expected of ['safe_delete', 'safety_trash', 'safety_undo', 'safety_snapshot', 'safety_restore', 'safety_check', 'safety_journal', 'safety_status']) {
+for (const expected of ['safe_delete', 'safety_trash', 'safety_undo', 'safety_snapshot', 'safety_restore', 'safety_check', 'safety_journal', 'safety_status', 'safety_ask']) {
   check(toolNames.includes(expected), `tool registered: ${expected}`)
 }
 
@@ -111,6 +107,77 @@ check(freeDelOk === undefined, 'guard allows non-recursive file delete on free p
 // Guard: deny write to protected profile manifest
 const writeDeny = guard({ name: 'write', arguments: { file_path: path.join(web, 'package.json') }, agent: undefined })
 check(typeof writeDeny === 'string' && writeDeny.includes('blocked'), 'guard denies write to profile package.json')
+
+// Educational denial: must explain what/why and the sanctioned path
+check(
+  typeof writeDeny === 'string' && writeDeny.includes('safe_delete') && writeDeny.includes('Why it matters') && writeDeny.includes('Target:'),
+  'denial message is educational (target + consequence + sanctioned path)'
+)
+
+// Anti-loop escalation: the same target blocked twice warns the agent to STOP
+const writeDeny2 = guard({ name: 'write', arguments: { file_path: path.join(web, 'package.json') }, agent: undefined })
+check(typeof writeDeny2 === 'string' && /attempt #2|STOP/i.test(writeDeny2), 'guard escalates after repeated denials for the same target')
+
+// safety_ask: creates a structured request; the guard denies while pending,
+// then allows the matching call once the user grants it (one-shot).
+const askTool = registeredTools.find((t) => t.name === 'safety_ask')
+check(typeof askTool === 'object' && askTool !== undefined, 'tool registered: safety_ask')
+const askTarget = path.join(web, 'plugins', 'p1', 'old.js')
+writeFileSync(askTarget, 'x\n')
+const ask = await askTool.execute({ path: askTarget, kind: 'delete', what: 'stale plugin file', why: 'cleanup', consequence: 'removed from plugin dir', alternative: 'keep a backup' })
+const askId = /request ([a-z0-9]+) created/.exec(ask.text)
+check(askId !== null, 'safety_ask creates a request with an id')
+const pendingDeny = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Force "' + askTarget + '"' }, agent: undefined })
+check(typeof pendingDeny === 'string' && pendingDeny.includes(askId[1]), 'guard reports the pending approval id')
+grantApproval(home, askId[1], { grantedBy: 'cli-user' })
+const userApproved = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Force "' + askTarget + '"' }, agent: undefined })
+check(userApproved === undefined, 'guard allows the user-approved delete (one-shot)')
+const deniedAgain = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Force "' + askTarget + '"' }, agent: undefined })
+check(typeof deniedAgain === 'string', 'approval is one-shot; the next call is blocked again')
+
+// cooperative mode: a human-granted generic recursive approval lets a free-path
+// recursive shell delete through (one-shot); strict mode stays non-approvable.
+const coopGuards = []
+const coopCtx = {
+  effect(fn) { const r = fn(); return () => {} },
+  tools: { register() { return () => {} }, guard(g) { coopGuards.push(g); return () => {} } },
+  systemPrompt: { section() {} },
+  on() { return () => {} },
+  get() {},
+  logger: { warn: () => {} },
+}
+apply(coopCtx, { home, homeIsConfirm: false, mode: 'cooperative' })
+const coopGuard = coopGuards[0]
+check(coopGuards.length === 1, 'cooperative mode registers a guard')
+const strictRec = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "C:\\Temp\\scratch"' }, agent: undefined })
+check(typeof strictRec === 'string' && strictRec.includes('not approvable'), 'strict mode: recursive free-path delete is not approvable')
+const coopDeny = coopGuard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "C:\\Temp\\scratch"' }, agent: undefined })
+check(typeof coopDeny === 'string', 'cooperative mode still denies without approval')
+grantApprovalFor(home, { kind: 'delete', target: null, recursive: true, grantedBy: 'cli-user' })
+const coopAllow = coopGuard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "C:\\Temp\\scratch"' }, agent: undefined })
+check(coopAllow === undefined, 'cooperative mode allows a user-approved recursive delete (one-shot)')
+
+// A raw RECURSIVE shell delete on a PROTECTED path is never approvable — even
+// with an exact, user-granted approval it must go through safe_delete.
+grantApprovalFor(home, { kind: 'delete', target: path.join(web, 'node_modules'), recursive: true, grantedBy: 'cli-user' })
+const protRecDeny = guard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "' + path.join(web, 'node_modules') + '"' }, agent: undefined })
+check(typeof protRecDeny === 'string' && protRecDeny.includes('safe_delete'), 'protected recursive shell delete is never approvable via raw shell')
+
+// User-approved WRITE passes the fs waterfall (the approval is consumed there,
+// one-shot): the guard checks without consuming, the waterfall is the real gate.
+const fsGuard2 = listeners.get('fs/write-intent')[0]
+grantApprovalFor(home, { kind: 'write', target: path.join(web, 'package.json'), grantedBy: 'cli-user' })
+let approvedWritePassed = false
+try {
+  const r = await fsGuard2({ displayPath: path.join(web, 'package.json') }, {}, async () => 'next')
+  approvedWritePassed = r === 'next'
+} catch { approvedWritePassed = false }
+check(approvedWritePassed, 'fs/write-intent allows a user-approved write (consumes approval)')
+let approvedWriteBlocked2 = false
+try {
+  await fsGuard2({ displayPath: path.join(web, 'package.json') }, {}, async () => 'next')
+} catch (e) { approvedWriteBlocked2 = e && e.code === 'FS_DENIED' }
+check(approvedWriteBlocked2, 'fs/write-intent blocks the second write (approval is one-shot)')
 
 // Guard: allow edit of plugin source
 const pluginEdit = guard({ name: 'edit', arguments: { file_path: path.join(web, 'plugins', 'p1', 'lib', 'index.js') }, agent: undefined })
@@ -148,8 +215,14 @@ check(refused.ok === false && refused.error.includes('confirm'), 'safe_delete re
 const stateRefusal = await safeDelete.execute({ path: path.join(home, '.dsh-safety') })
 check(stateRefusal.ok === false && stateRefusal.error.includes('state'), 'safe_delete refuses its own state dir')
 
+// force:true alone is NOT a user approval
+const noApproval = await safeDelete.execute({ path: pluginFile, force: true })
+check(noApproval.ok === false && noApproval.error.includes("USER's approval"), 'safe_delete refuses force:true without a real user approval')
+
+// after the human grants an approval, force:true succeeds (still trash-only)
+grantApprovalFor(home, { kind: 'delete', target: pluginFile, grantedBy: 'cli-user' })
 const forced = await safeDelete.execute({ path: pluginFile, force: true })
-check(forced.ok === true && forced.text.includes('moved to trash'), 'safe_delete moves confirm path to trash with force:true')
+check(forced.ok === true && forced.text.includes('moved to trash'), 'safe_delete moves confirm path to trash after user approval')
 
 // safe_delete: preview describes a directory without moving it
 const dirVictim = path.join(home, 'tmp-dir')
@@ -181,7 +254,7 @@ check(chk.ok === true && typeof chk.text === 'string' && chk.text.startsWith('sa
 // safety_snapshot + safety_restore
 const snapTool = registeredTools.find((t) => t.name === 'safety_snapshot')
 const snap = await snapTool.execute({ label: 'harness' })
-check(snap.ok === true && /snapshot [\d-]+-harness: \d+ file/.test(snap.text), 'safety_snapshot created snapshot')
+check(snap.ok === true && /snapshot [\d-]+-harness-[a-z0-9]+: \d+ file/.test(snap.text), 'safety_snapshot created snapshot')
 const restTool = registeredTools.find((t) => t.name === 'safety_restore')
 const snapId = snap.text.split(' ')[1].replace(/:$/, '')
 const restNoConfirm = await restTool.execute({ id: snapId, confirm: false })

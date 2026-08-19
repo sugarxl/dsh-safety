@@ -1,4 +1,4 @@
-﻿<#
+<#
 # dsh-safety recover.ps1 — 启动失败急救（官方 profile 级）
 #
 # 场景：dsh web 打不开（例如装了某个坏插件 / 补丁层损坏）。
@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$dshHome = $env:USERPROFILE + '\.dsh'
+$dshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { $env:USERPROFILE + '\.dsh' }
 $profileDir = Join-Path (Join-Path $dshHome 'profiles') $Profile
 $profilePkg = Join-Path $profileDir 'package.json'
 $backupsRoot = Join-Path $dshHome '.dsh-safety\install-backups'
