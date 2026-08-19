@@ -65,6 +65,14 @@
 - **审批被并发写覆盖丢（Linux CI 根因）**：守卫拒绝时异步触发 `recordBlock` → `saveState`（先 `await writeFile(tmp)` 再 `await rename`），而审批授予/消费走同步 `saveStateSync`——两者共用同一个 `state.json.tmp`。Linux 上交错时：同步写把共享 tmp rename 走，异步写再 rename 报 **ENOENT**；且异步写提交的是加载时的**旧状态**，会覆盖掉刚批准的审批（harness 实测 `cooperative: a specific-directory recursive approval covers its subtree` 失败）。Windows 调度时序不同未触发。
 - **修复**：所有 state 变更（recordBlock/降级/关停/journal/trash/快照记录 + 审批）统一经 `saveStateSync` **同步原子提交**（load→mutate→save 在一个事件循环切片内不可中断）；`saveState`（异步）仅保留给外部消费者，且临时文件名改为**每写唯一**（pid+时间戳+随机），从根上消除共享 tmp 的 ENOENT。66 单测 + harness 全绿（Windows 本地验证）。
 
+### Fixed（整洁度重构：死代码清理、IO 合并、跨进程锁、元数据修正）
+
+- **删除 `state.mjs` 未接线的死代码（18 个导出）**：`addTrashEntry`/`listTrash`/`restoreTrashEntry`/`createSnapshotRecord`/`listSnapshots`/`getSnapshot`/`deleteSnapshot`/`appendJournal`/`journalTail`/`journalByKind`/`journalBySession`/`setDegraded`/`getDegraded`/`getDegradedReason`/`clearDegraded`/`recordShutdown`/`getShutdownReason`/`getState` 及其 SCHEMA 字段（trash/snapshots/journal/degraded/shutdown）。这些与 `safety-core.mjs` 的文件系统存储（trash 目录 / snapshots 目录 / journal.jsonl）重复且无人引用；删除后 state.json 只承载守卫计数 + 审批，单进程内不再有两套状态系统。
+- **`recordBlock` 热路径 IO 合并**：拦截计数改为内存累计 + `setImmediate` 合并落盘（同一事件循环片内多次拒绝只写一次磁盘），`getBlockCounts` 合并未落盘计数、立即可见；落盘前重新加载最新 state（不覆盖并发审批），并在跨进程锁内执行。
+- **审批跨进程锁**：`createApproval`/`grantApproval`/`revokeApproval`/`consumeApproval` 在 `mkdirSync` 原子锁（`.approval-lock`）内执行读改写临界区——web + headless 双进程下「一次性消费」不再可能被并发丢更新；获取限时重试（5×5ms），超时强制窃取（临界区亚毫秒，活更久必是崩溃残留）。同步实现，守卫热路径可用。
+- **author 乱码修正**：package.json `"author"` 由 GBK mojibake `灏忓叞` 更正为 `小兰 (sugarxl)`。
+- 测试：state 测试同步适配（合并落盘、新增「flush 不覆盖审批」回归、锁释放与陈旧窃取测试）。66 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）

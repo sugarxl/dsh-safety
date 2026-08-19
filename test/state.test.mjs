@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { promises as fsp, existsSync } from 'node:fs'
+import { promises as fsp, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -9,15 +9,7 @@ import {
   recordBlock,
   getBlockCounts,
   getTotalBlocks,
-  setDegraded,
-  getDegraded,
-  getDegradedReason,
-  clearDegraded,
-  recordShutdown,
-  getShutdownReason,
   stateFile,
-  appendJournal,
-  journalTail,
   createApproval,
   grantApproval,
   grantApprovalFor,
@@ -38,51 +30,54 @@ async function makeHome() {
 test('loadState returns a usable default when no state file exists', async () => {
   const { base, home } = await makeHome()
   const s = loadState(home)
-  assert.equal(s.degraded, 'none')
   assert.equal(s.bootCount, 0)
   assert.deepEqual(s.guard.blocks, {})
   assert.deepEqual(s.guard.sessions, [])
-  assert.ok(Array.isArray(s.trash.entries))
+  assert.deepEqual(s.approvals.list, [])
   assert.equal(existsSync(stateFile(home)), false, 'reading must not create the file')
   await fsp.rm(base, { recursive: true, force: true })
 })
 
-test('recordBlock persists per-tool counts and session ids (array, not Set)', async () => {
+test('recordBlock coalesces and persists per-tool counts and session ids', async () => {
   const { base, home } = await makeHome()
   await recordBlock(home, 'write', 'sess-1', 'denied', '/x')
   await recordBlock(home, 'write', 'sess-1', 'denied', '/x')
   await recordBlock(home, 'pwsh', 'sess-2', 'denied', '/y')
+  // merged read sees the counters immediately (before the coalesced flush)
+  assert.equal(getBlockCounts(home).write, 2)
+  assert.equal(getBlockCounts(home).pwsh, 1)
+  assert.equal(getTotalBlocks(home), 3)
+  // after the setImmediate flush, the disk reflects them too
+  await new Promise((r) => setImmediate(r))
   const s = loadState(home)
   assert.equal(s.guard.blocks.write, 2)
   assert.equal(s.guard.blocks.pwsh, 1)
   assert.deepEqual(s.guard.sessions, ['sess-1', 'sess-2'])
-  assert.equal(getBlockCounts(home).write, 2)
-  assert.equal(getTotalBlocks(home), 3)
   await fsp.rm(base, { recursive: true, force: true })
 })
 
-test('degraded mode + shutdown record roundtrip', async () => {
+test('recordBlock flush never clobbers concurrently-created approvals (race regression)', async () => {
   const { base, home } = await makeHome()
-  await setDegraded(home, 'guard-off', 'misconfigured')
-  assert.equal(getDegraded(home), 'guard-off')
-  assert.equal(getDegradedReason(home), 'misconfigured')
-  await clearDegraded(home)
-  assert.equal(getDegraded(home), 'none')
-  await recordShutdown(home, 'SIGINT')
-  assert.equal(getShutdownReason(home), 'SIGINT')
-  const s = loadState(home)
-  assert.ok(s.shutdownAt, 'shutdownAt is persisted (schema keeps the field)')
+  const req = createApproval(home, { kind: 'delete', target: '/x', requestedBy: 'agent' })
+  grantApproval(home, req.id, { grantedBy: 'user' })
+  await recordBlock(home, 'write', 'sess-1', 'denied', '/x')
+  await new Promise((r) => setImmediate(r))
+  assert.equal(consumeApproval(home, { kind: 'delete', target: '/x' }), true, 'approval survived the block-count flush')
   await fsp.rm(base, { recursive: true, force: true })
 })
 
-test('appendJournal + journalTail respect maxAge/maxSize and are JSONL-safe', async () => {
+test('approval writes run under the cross-process lock (lock is cleaned up; stale holder is stolen)', async () => {
   const { base, home } = await makeHome()
-  await appendJournal(home, 'guard', { target: '/a' })
-  await appendJournal(home, 'delete', { target: '/b' })
-  const tail = await journalTail(home, 10)
-  assert.equal(tail.length, 2)
-  assert.equal(tail[0].kind, 'guard')
-  assert.equal(tail[1].kind, 'delete')
+  const lockDir = path.join(home, '.dsh-safety', '.approval-lock')
+  const req = createApproval(home, { kind: 'delete', target: '/x', requestedBy: 'agent' })
+  assert.equal(existsSync(lockDir), false, 'lock is released after a normal create')
+  grantApproval(home, req.id, { grantedBy: 'user' })
+  assert.equal(existsSync(lockDir), false, 'lock is released after a normal grant')
+  // a held (crashed-holder) lock is force-stolen after the retry window
+  mkdirSync(lockDir, { recursive: true })
+  writeFileSync(path.join(lockDir, 'stamp'), String(Date.now() - 60_000), 'utf8')
+  assert.equal(consumeApproval(home, { kind: 'delete', target: '/x' }), true, 'held lock is stolen and the consume still works')
+  assert.equal(existsSync(lockDir), false, 'lock is released after the stolen acquire')
   await fsp.rm(base, { recursive: true, force: true })
 })
 

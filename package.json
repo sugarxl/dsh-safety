@@ -1,7 +1,7 @@
 {
   "name": "@suagr_xl/dsh-safety",
   "version": "0.1.3",
-  "author": "灏忓叞 (sugarxl)",
+  "author": "小兰 (sugarxl)",
   "description": "A safety harness plugin for DeepSeek Harness (DSH): protected-path enforcement, trash-based safe_delete with undo, last-known-good composition snapshots, pre-restart composition checks, and an audit journal.",
   "type": "module",
   "main": "lib/index.js",
