@@ -7,6 +7,10 @@ name: release
 # Note: the package itself is published to the official npm registry
 # (@suagr_xl/dsh-safety); this workflow only publishes the GitHub-side
 # Release artifact for visibility/tags.
+#
+# Self-diagnosis: every step tees its output to /tmp/ci-step.txt; on failure
+# the last-run step's output is pushed to the `ci-logs` branch so the exact
+# error can be read via `git fetch origin ci-logs`.
 
 on:
   push:
@@ -25,18 +29,38 @@ jobs:
         with:
           node-version: 22
       - name: Syntax check
-        run: npm run check
+        run: npm run check 2>&1 | tee /tmp/ci-step.txt
       - name: Unit tests (zero-dependency)
-        run: npm test
+        run: npm test 2>&1 | tee /tmp/ci-step.txt
       - name: Integration harness (zero-dependency, clean checkout)
-        run: node test/harness.mjs
+        run: node test/harness.mjs 2>&1 | tee /tmp/ci-step.txt
       - name: Pack tarball
-        run: npm pack
+        run: npm pack 2>&1 | tee /tmp/ci-step.txt
       - name: Create GitHub Release
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "dsh-safety ${GITHUB_REF_NAME}" \
-            --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
-            *.tgz
+          # Idempotent: create the release, or edit it if it already exists
+          # (a re-triggered tag push must not fail on "release already exists").
+          ls -la *.tgz 2>&1 | tee /tmp/ci-step.txt
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --title "dsh-safety ${GITHUB_REF_NAME}" \
+              --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
+              *.tgz
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "dsh-safety ${GITHUB_REF_NAME}" \
+              --notes "Release ${GITHUB_REF_NAME}. Full details in [CHANGELOG.md](CHANGELOG.md). Install with \`dsh plugin --profile web add @suagr_xl/dsh-safety\`." \
+              *.tgz
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Publish failure log to ci-logs branch
+        if: failure()
+        run: |
+          cp /tmp/ci-step.txt "$GITHUB_WORKSPACE/ci-failure.txt" 2>/dev/null || true
+          git config user.name "dsh-safety-ci"
+          git config user.email "ci@dsh-safety.local"
+          git checkout -b ci-logs
+          git add ci-failure.txt
+          git commit -m "ci: release failure log $(date -u +%Y%m%d-%H%M%S)"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/sugarxl/dsh-safety.git" ci-logs -f
