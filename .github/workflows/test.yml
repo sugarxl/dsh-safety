@@ -44,5 +44,13 @@ jobs:
           git add ci-failure.txt
           git commit -m "ci: test failure log $(date -u +%Y%m%d-%H%M%S)"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/sugarxl/dsh-safety.git" ci-logs -f
-      - name: Integration harness
-        run: node test/harness.mjs
+      - name: Integration harness (capture output)
+        run: |
+          set +e
+          node test/harness.mjs 2>&1 | tee /tmp/harness-output.txt
+          code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            cp /tmp/harness-output.txt "$GITHUB_WORKSPACE/ci-failure.txt"
+            echo "harness failed — full output saved to ci-failure.txt (see next step)"
+            exit $code
+          fi
