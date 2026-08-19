@@ -359,6 +359,71 @@ test('rm --recursive is recognized as a recursive delete', () => {
   assert.equal(isRecursiveDelete('bash', { command: 'rm --recursive /tmp/project' }), true)
 })
 
+test('new destructive verbs: [IO.File]::Delete, git rm, and the ri alias', () => {
+  for (const c of [
+    '[IO.File]::Delete("C:\\x")', // System. prefix omitted
+    '[System.IO.File]::Delete("C:\\x")', // full prefix still works
+    '[IO.Directory]::Delete("C:\\x", $true)',
+    'git rm C:\\x\\y.txt',
+    'git rm -r C:\\x',
+    'ri "C:\\x"', // PowerShell Remove-Item alias
+  ]) {
+    assert.equal(hasDestructiveVerb(c), true, `should detect: ${c}`)
+  }
+  assert.equal(hasDestructiveVerb('git status'), false)
+  assert.equal(hasDestructiveVerb('git add .'), false)
+})
+
+test('extractShellPaths also captures forward-slash Windows paths', () => {
+  const p = extractShellPaths('Remove-Item -Force "C:/Users/a/.dsh/profiles/web/package.json"', HOME)
+  assert.ok(p.some((x) => x.toLowerCase().includes('.dsh')), JSON.stringify(p))
+  const c = extractShellPaths('Remove-Item -Force "C:/Users/a/Documents/x.txt"', HOME)
+  assert.ok(c.some((x) => x.toLowerCase().includes('documents')), JSON.stringify(c))
+})
+
+test('str_replace_editor delete command is classified as a delete, not ignored', () => {
+  const protectedAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')
+  const p = { blockWriteRoots: [path.join(HOME, '.dsh')], confirmDeleteRoots: [] }
+  const d = destructiveTargetForCall('str_replace_editor', { path: protectedAbs, command: 'delete' }, p)
+  assert.equal(d.action, 'deny')
+  assert.equal(d.kind, 'delete')
+  assert.equal(d.cls, 'protected')
+})
+
+test('run_code WRITES to protected paths are denied (write guard bypass closed)', () => {
+  const protectedAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')
+  const p = { home: HOME, blockWriteRoots: [path.join(HOME, '.dsh')], confirmDeleteRoots: [] }
+  // fs.writeFileSync on a protected path — no delete verb anywhere
+  const d1 = destructiveTargetForCall('run_code', { code: `require('fs').writeFileSync(${JSON.stringify(protectedAbs)}, '{}')` }, p)
+  assert.equal(d1.action, 'deny')
+  assert.equal(d1.kind, 'write')
+  assert.equal(d1.cls, 'protected')
+  // a relative write whose path is not extractable is a documented limitation
+  // (no marker fallback for writes — see safety-core), but the absolute
+  // spelling under a different protected file is still caught
+  const d2 = destructiveTargetForCall('run_code', { code: `fs.writeFileSync(${JSON.stringify(path.join(HOME, '.dsh', 'cordis.patch.yml'))}, 'x')` }, p)
+  assert.equal(d2.action, 'deny')
+  assert.equal(d2.kind, 'write')
+  // writes to a confirm-zone path stay allowed (edits are permitted)
+  const confirmAbs = path.join(HOME, '.dsh', 'profiles', 'web', 'plugins', 'p1', 'lib', 'index.js')
+  const p2 = { home: HOME, blockWriteRoots: [path.join(HOME, '.dsh', 'profiles', 'web', 'package.json')], confirmDeleteRoots: [path.join(HOME, '.dsh', 'profiles', 'web', 'plugins')] }
+  const d3 = destructiveTargetForCall('run_code', { code: `fs.writeFileSync(${JSON.stringify(confirmAbs)}, 'x')` }, p2)
+  assert.equal(d3.action, 'allow')
+})
+
+test('recursive free-path deny carries the explicit target (so cooperative approvals can match)', () => {
+  const p = { home: HOME, blockWriteRoots: [], confirmDeleteRoots: [] }
+  // with an explicit path: abs is carried
+  const withPath = destructiveTargetForCall('pwsh', { command: 'Remove-Item -Recurse -Force "C:\\Temp\\scratch"' }, p)
+  assert.equal(withPath.action, 'deny')
+  assert.equal(withPath.cls, 'recursive')
+  assert.ok(withPath.abs !== null, 'explicit recursive target is carried in abs')
+  // without any path: abs stays null (only a generic approval could match)
+  const noPath = destructiveTargetForCall('pwsh', { command: 'Remove-Item -Recurse -Force' }, p)
+  assert.equal(noPath.action, 'deny')
+  assert.equal(noPath.abs, null)
+})
+
 test('restoreSnapshot is transactional: phase-B failure rolls back cleanly', async () => {
   const { base, home } = await makeFakeHome()
   const web = path.join(home, 'profiles', 'web')

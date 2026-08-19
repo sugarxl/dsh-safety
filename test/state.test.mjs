@@ -141,6 +141,30 @@ test('approval target matching is case-insensitive on Windows (keyOf parity)', a
   await fsp.rm(base, { recursive: true, force: true })
 })
 
+test('a recursive approval covers the approved root AND anything under it', async () => {
+  const { base, home } = await makeHome()
+  const root = path.join(home, 'scratch')
+  const child = path.join(root, 'sub', 'dir')
+  grantApprovalFor(home, { kind: 'delete', target: root, recursive: true, grantedBy: 'cli-user' })
+  assert.equal(consumeApproval(home, { kind: 'delete', target: child, recursive: true }), true, 'parent approval covers a subtree delete')
+  // a sibling is NOT covered
+  grantApprovalFor(home, { kind: 'delete', target: root, recursive: true, grantedBy: 'cli-user' })
+  assert.equal(consumeApproval(home, { kind: 'delete', target: path.join(home, 'other'), recursive: true }), false, 'sibling is not covered')
+  // the generic (target null) approval still covers everything
+  grantApprovalFor(home, { kind: 'delete', target: null, recursive: true, grantedBy: 'cli-user' })
+  assert.equal(consumeApproval(home, { kind: 'delete', target: path.join(home, 'anywhere'), recursive: true }), true)
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
+test('approvals list is capped so safety_ask spam cannot grow state unbounded', async () => {
+  const { base, home } = await makeHome()
+  for (let i = 0; i < 600; i++) {
+    createApproval(home, { kind: 'delete', target: path.join(home, 'x' + i), requestedBy: 'agent' })
+  }
+  assert.equal(listApprovals(home).length, 500, 'only the newest 500 remain')
+  await fsp.rm(base, { recursive: true, force: true })
+})
+
 test('hasActiveApproval is non-consuming and matches granted approvals', async () => {
   const { base, home } = await makeHome()
   const target = path.join(home, 'write.txt')

@@ -20,6 +20,20 @@
 - **`install.ps1`/`recover.ps1` 不认 `DSH_HOME`**：改为优先 `$env:DSH_HOME`，缺省回退 `%USERPROFILE%\.dsh`。
 - 测试：新增 6 组回归（id 穿越 ×2、run_code 路径分类、变量引用解析、审批大小写、`hasActiveApproval` 非消费语义），harness 新增「已批准写通过瀑布层且一次性」「protected 递归删不可批准」端到端断言。51 单测 + harness 全绿。
 
+### Fixed（深度逻辑/安全审查，第二轮：更多绕过面与健壮性）
+
+- **`run_code` 写 protected 绕过（真实洞）**：`fs.writeFileSync(protectedPath)` 完全不经过写守卫——任意代码可直接改写 profile manifest/补丁。现 `run_code` 同样扫描写动词（`writeFile/appendFile/rename/copyFile/cp/truncate/createWriteStream` 等），对显式绝对路径按 protected 分类拦截；写操作不做 marker 兜底（会误杀 confirm 区合法编辑），相对路径写属于已记录局限。
+- **`fs/delete-intent` 未挂钩（覆盖缺口）**：任何守卫不认识的 fs 服务删除工具（`delete_file` 等）可直接删 protected/confirm 路径。现挂钩 `fs/delete-intent`，与写瀑布一致：无审批一律 `FS_DENIED`，有已批审批则消费放行。
+- **cooperative 递归审批对「具体目录」失效（真实 bug）**：`dsh-safety allow --path <dir> --recursive` 创建的审批带具体 target，但守卫的递归拒绝此前 `abs: null`（只匹配 target-null 的通用审批）——文档宣称的功能实际不生效。现递归拒绝携带首个显式目标路径，且递归审批语义升级为「覆盖被批准根目录及其整棵子树」（`isUnder` 匹配），通用审批不受影响。
+- **`[IO.File]::Delete` / `[IO.Directory]::Delete` 无 `System.` 前缀漏检**：`[IO.File]::Delete("x")` 此前不被识别为破坏性动词；`git rm` 也未覆盖（`git rm` 会从工作树删除文件）；补上 PowerShell `ri`（Remove-Item 别名）。
+- **正斜杠 Windows 路径漏检**：`C:/Users/a/.dsh/...` 不匹配反斜杠正则，可绕过 confirm/protected 路径分类。`extractShellPaths` 现同时接受 `C:\x` 与 `C:/x`。
+- **编辑器 `delete` 命令未分类**：`str_replace_editor` 若含 `delete`/`remove` 命令，此前完全放行。现按删除分类（protected/confirm 拒绝并引导 `safe_delete`）。
+- **审批列表无上限**：agent 可无限 `safety_ask` 刷 pending 记录撑爆 `state.json`。现上限 500 条（超限丢最旧）。
+- **journal.jsonl 无限增长**：只删 trash/快照，日志文件永不裁剪。现超 8MB 自动裁剪保留最近 20000 行。
+- **`restoreSnapshot` 同秒备份目录冲突**：同秒两次恢复共用同一备份目录会互相覆盖。备份目录加随机后缀。
+- **审计 CSV 导出未转义**：含逗号/引号的字段会破坏 CSV 行。字段统一加引号转义。
+- 测试：新增 7 组回归（新破坏性动词、正斜杠路径、编辑器 delete、run_code 写、递归目标携带、审批父目录覆盖、审批上限），harness 新增「cooperative 具体目录递归审批」「fs/delete-intent 拦截与放行」端到端断言。58 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）

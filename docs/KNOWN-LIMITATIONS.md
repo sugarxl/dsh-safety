@@ -8,8 +8,9 @@ guard 在 `ctx.tools.guard()` 层拦截**模型的工具调用**。用户在真�
 
 ## 2. `run_code` 是文本扫描，不是隔离
 
-guard 扫描 `run_code` 代码体，覆盖主流的直白写法（`fs.rmSync`/`shutil.rmtree`/`require('fs')`、`import { rmSync/unlinkSync } from 'node:fs'` 后的裸调用等）。但：
+guard 扫描 `run_code` 代码体，覆盖主流的直白写法（`fs.rmSync`/`shutil.rmtree`/`require('fs')`、`import { rmSync/unlinkSync } from 'node:fs'` 后的裸调用、`fs.writeFileSync(绝对路径)` 写受保护路径等）。但：
 - **动态拼接路径 / 运行时构造调用 / import 别名**（`import { rmSync as purge }` 之类）无法靠文本确定，可能绕过；
+- **相对路径/变量拼接的写**（`fs.writeFileSync('.dsh/profiles/...')`）不做 marker 兜底（会误杀 confirm 区合法编辑），只拦显式绝对路径——相对写法是已知局限；
 - `run_code` 是任意代码执行，**真正隔离它只能靠 DSH 沙箱**。
 
 ## 3. shell 命令是文本匹配，有误报/漏报

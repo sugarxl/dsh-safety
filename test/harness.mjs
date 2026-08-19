@@ -157,6 +157,12 @@ grantApprovalFor(home, { kind: 'delete', target: null, recursive: true, grantedB
 const coopAllow = coopGuard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "C:\\Temp\\scratch"' }, agent: undefined })
 check(coopAllow === undefined, 'cooperative mode allows a user-approved recursive delete (one-shot)')
 
+// A recursive approval for a SPECIFIC free directory (the documented CLI
+// `allow --path <dir> --recursive` flow) also works, and covers the subtree.
+grantApprovalFor(home, { kind: 'delete', target: 'C:\\Temp\\coop-project', recursive: true, grantedBy: 'cli-user' })
+const coopDirAllow = coopGuard({ name: 'pwsh', arguments: { command: 'Remove-Item -Recurse -Force "C:\\Temp\\coop-project\\sub\\build"' }, agent: undefined })
+check(coopDirAllow === undefined, 'cooperative: a specific-directory recursive approval covers its subtree (one-shot)')
+
 // A raw RECURSIVE shell delete on a PROTECTED path is never approvable — even
 // with an exact, user-granted approval it must go through safe_delete.
 grantApprovalFor(home, { kind: 'delete', target: path.join(web, 'node_modules'), recursive: true, grantedBy: 'cli-user' })
@@ -204,6 +210,22 @@ try {
   passed = r === 'next'
 } catch { passed = false }
 check(passed, 'fs/write-intent allows plugin-source write')
+
+// fs/delete-intent: any unknown-name fs delete tool is blocked on
+// protected/confirm paths, and a granted delete approval lets it through.
+const fsDelGuard = listeners.get('fs/delete-intent')[0]
+let fsDelBlocked = false
+try {
+  await fsDelGuard({ displayPath: path.join(web, 'plugins', 'p1', 'old.js') }, {}, async () => 'next')
+} catch (e) { fsDelBlocked = e && e.code === 'FS_DENIED' }
+check(fsDelBlocked, 'fs/delete-intent blocks a confirm-zone delete without approval')
+grantApprovalFor(home, { kind: 'delete', target: path.join(web, 'plugins', 'p1', 'old.js'), recursive: false, grantedBy: 'cli-user' })
+let fsDelApproved = false
+try {
+  const r = await fsDelGuard({ displayPath: path.join(web, 'plugins', 'p1', 'old.js') }, {}, async () => 'next')
+  fsDelApproved = r === 'next'
+} catch { fsDelApproved = false }
+check(fsDelApproved, 'fs/delete-intent allows a user-approved delete (consumes approval)')
 
 // safe_delete: refuses confirm-zone paths without force
 const safeDelete = registeredTools.find((t) => t.name === 'safe_delete')
