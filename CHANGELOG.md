@@ -55,6 +55,11 @@
 - **`sha256File` 整文件读入内存**：大 lockfile 等全量载入。改为 64KB 分块流式哈希（与 snapshot-store 一致）。
 - 测试：新增 2 组回归（损坏快照校验门、瀑布符号链接父目录），harness 端到端断言 `fs/write-intent` 拦截「经符号链接父目录写受保护区」。65 单测 + harness 全绿。
 
+### Fixed（Linux CI 暴露的跨平台 bug）
+
+- **`resolveVariableRefs` 在 POSIX 上不归一反斜杠（Linux CI 失败根因）**：尾段如 `%DSH_HOME%\profiles\web\x.js` 在 Linux 上 `path.join` 后 `profiles\web\x.js` 仍是**一个含字面反斜杠的文件名组件**，`isUnder`/`classify` 前缀匹配失败 → protected 路径被当成 free，误走 `var-ref` 分支（CI 实测 `actual: 'var-ref' expected: 'protected'`）。现尾段反斜杠统一归一为 `path.sep`（Windows 为 no-op）。新增跨平台回归测试。
+- CI 自诊断：`npm test` 失败时完整输出经 `permissions: contents: write` 推送到 `ci-logs` 分支（`branches-ignore` 防循环），外部可直接 `git fetch` 读取失败日志；测试输出同时 `tee` 到步骤日志。66 单测 + harness 全绿。
+
 ## [Unreleased]
 
 ### Docs（文档全方位改进）

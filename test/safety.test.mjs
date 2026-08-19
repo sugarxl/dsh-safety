@@ -14,6 +14,7 @@ import {
   isUnder,
   hasDestructiveVerb,
   extractShellPaths,
+  resolveVariableRefs,
   utf8Valid,
   looksLikeMojibake,
   scanPatchIds,
@@ -277,6 +278,23 @@ test('run_code bodies with explicit protected/confirm absolute paths are denied 
   const d2 = destructiveTargetForCall('run_code', { code: `import { unlinkSync } from 'node:fs'\nunlinkSync(${JSON.stringify(confirmAbs)})` }, p)
   assert.equal(d2.action, 'deny')
   assert.equal(d2.cls, 'confirm')
+})
+
+test('resolveVariableRefs normalizes Windows-style tails to platform separators', () => {
+  const customHome = path.join(HOME, 'custom-dsh-home')
+  const p = { home: customHome, blockWriteRoots: [path.join(customHome, 'profiles')], confirmDeleteRoots: [] }
+  const resolved = resolveVariableRefs('Remove-Item -Force "%DSH_HOME%\\profiles\\web\\plugins\\p1\\lib\\x.js"', p)
+  assert.ok(resolved.length > 0, 'the %DSH_HOME% reference resolves')
+  // Regression for the Linux CI failure: a literal backslash in the tail used
+  // to survive path.join on POSIX as one weird filename component, so the
+  // resolved path never matched the protected root (cls came back 'var-ref'
+  // instead of 'protected').
+  for (const r of resolved) {
+    assert.equal(r.includes('\\'), process.platform === 'win32', 'backslashes are normalized on POSIX')
+  }
+  const d = destructiveTargetForCall('pwsh', { command: 'Remove-Item -Force "%DSH_HOME%\\profiles\\web\\plugins\\p1\\lib\\x.js"' }, p)
+  assert.equal(d.action, 'deny')
+  assert.equal(d.cls, 'protected', 'resolved path classifies as protected on every platform')
 })
 
 test('variable refs that resolve into the DSH home are denied even without a protected marker', () => {
